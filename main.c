@@ -19,9 +19,29 @@
  */
 
 #include <initguid.h>
+#include <libxml/parser.h>
+#include <shlwapi.h>
 #include "private.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(xgameruntime);
+
+char *msaAppId = NULL;
+BOOLEAN fullTrust = FALSE;
+BOOLEAN initializeCalled = FALSE;
+
+BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, void *reserved )
+{
+    TRACE( "hinst %p, reason %lu, reserved %p.\n", hinst, reason, reserved );
+
+    switch (reason)
+    {
+        case DLL_PROCESS_DETACH:
+            if (reserved) break;
+            if (msaAppId) free( msaAppId );
+            break;
+    }
+    return TRUE;
+}
 
 struct initialize_options
 {
@@ -32,8 +52,63 @@ struct initialize_options
 
 HRESULT WINAPI InitializeApiImplEx2( ULONG gdkVer, ULONG gsVer, char mode, const struct initialize_options *options )
 {
+    char filename[MAX_PATH + 1], *last;
+    xmlNodePtr child, root;
+    xmlDocPtr config;
+
     TRACE( "gdkVer %ld, gsVer %ld, mode %d, options %p.\n", gdkVer, gsVer, mode, options );
+
+    if (initializeCalled) return S_OK;
+    initializeCalled = TRUE;
+
+    if (options)
+    {
+        if (options->isInline && !(config = xmlReadMemory( options->gameConfig, strlen( options->gameConfig ), NULL, NULL, 0 )))
+            return E_GAMERUNTIME_GAMECONFIG_BAD_FORMAT;
+        else if (!(config = xmlReadFile( options->gameConfig, NULL, 0 )))
+            return E_GAMERUNTIME_GAMECONFIG_BAD_FORMAT;
+    }
+    else
+    {
+        if (!GetModuleFileNameA( NULL, filename, MAX_PATH )) return HRESULT_FROM_WIN32( GetLastError() );
+        /* executable can be in a subdirectory, search up the tree until we find MicrosoftGame.config */
+        while ((last = strrchr( filename, '\\' )))
+        {
+            *(last + 1) = 0;
+            if (strlen( filename ) + strlen( "MicrosoftGame.config" ) < MAX_PATH)
+                strcat( filename, "MicrosoftGame.config" );
+            else return HRESULT_FROM_WIN32( ERROR_INSUFFICIENT_BUFFER );
+            if (PathFileExistsA( filename )) break;
+            *last = 0;
+            if (!strrchr( filename, '\\' )) return E_GAME_MISSING_GAME_CONFIG;
+        }
+        if (!(config = xmlReadFile( filename, NULL, 0 ))) return E_GAMERUNTIME_GAMECONFIG_BAD_FORMAT;
+    }
+
+    if (!(root = xmlDocGetRootElement( config ))) goto badconfig;
+    if (!strcmp( (char *)root->name, "Game" ))
+    {
+        for (child = root->children; child; child = child->next)
+            if (child->type == XML_ELEMENT_NODE)
+            {
+                if (!strcmp( (char *)child->name, "MSAAppId" ))
+                    msaAppId = (char *)xmlNodeGetContent( child );
+                else if (!strcmp( (char *)child->name, "MSAFullTrust" ))
+                {
+                    char *value = (char *)xmlNodeGetContent( child );
+                    fullTrust = !strcmp( value, "true" ) || !strcmp( value, "1" );
+                    free( value );
+                }
+            }
+    }
+    else goto badconfig;
+
+    xmlFreeDoc( config );
     return S_OK;
+
+badconfig:
+    xmlFreeDoc( config );
+    return E_GAMERUNTIME_GAMECONFIG_BAD_FORMAT;
 }
 
 HRESULT WINAPI InitializeApiImplEx( ULONG gdkVer, ULONG gsVer, char mode )

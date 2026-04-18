@@ -33,6 +33,9 @@
 #define WIDL_using_Windows_System_Profile
 #include <windows.system.profile.h>
 
+extern char *msaAppId;
+extern BOOLEAN fullTrust;
+
 extern IXAccessibilityImpl *x_accessibility_impl;
 extern IXAppCaptureImpl *x_app_capture_impl;
 extern IXAppCaptureMetadataImpl *x_app_capture_metadata_impl;

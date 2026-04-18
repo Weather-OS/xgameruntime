@@ -1,6 +1,6 @@
 MODULE    = xgameruntime.dll
-EXTRAINCL = -I$(srcdir)/include
-IMPORTS   = combase
+EXTRAINCL = -I$(srcdir)/include $(XML2_PE_CFLAGS)
+IMPORTS   = combase shlwapi $(XML2_PE_LIBS)
 
 SOURCES = \
 	include/xaccessibility.idl \
