@@ -886,40 +886,290 @@ static HRESULT WINAPI x_user_XUserResolvePrivilegeWithUiResult( IXUserImpl6 *ifa
     return E_NOTIMPL;
 }
 
+struct XUserGetTokenAndSignatureContext
+{
+    XUserHandle user;
+    XUserGetTokenAndSignatureOptions options;
+    char *url;
+    char *method;
+    SIZE_T headersSize;
+    char *headers;
+    SIZE_T bodySize;
+    void *bodyBuffer;
+    BOOLEAN isUtf16;
+    SIZE_T dataSize;
+    union
+    {
+        XUserGetTokenAndSignatureData *data;
+        XUserGetTokenAndSignatureUtf16Data *dataUtf16;
+    };
+};
+
+static HRESULT WINAPI XUserGetTokenAndSignatureProvider( XAsyncOp op, const XAsyncProviderData *data )
+{
+    struct XUserGetTokenAndSignatureContext *context;
+    char *buffer = NULL, signature[104];
+    IXThreadingImpl *xthreading;
+    struct endpoint info;
+    WCHAR *auth = NULL;
+    SIZE_T size = 0;
+    HRESULT hr;
+
+    TRACE( "op %d, data %p.\n", op, data );
+
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+    context = (struct XUserGetTokenAndSignatureContext *)data->context;
+
+    switch (op)
+    {
+        case XAsyncOp_Begin:
+            hr = IXThreadingImpl_XAsyncSchedule( xthreading, data->async, 0 );
+            break;
+
+        case XAsyncOp_GetResult:
+            memcpy( data->buffer, context->data, context->dataSize );
+            break;
+
+        case XAsyncOp_DoWork:
+            if (FAILED(hr = IUser_GetEndpointInfo( &context->user->IUser_iface, context->url, &info ))) goto complete;
+            if (info.tokenType && FAILED(hr = IUser_GetAuthorization( &context->user->IUser_iface, info.relyingParty, &auth ))) goto complete;
+
+            if (context->isUtf16)
+            {
+                context->dataSize = sizeof(*context->dataUtf16) + (auth ? wcslen( auth ) * sizeof(WCHAR) : 0) + (info.policy ? 104 * sizeof(WCHAR) : 0);
+                if (!(context->dataUtf16 = calloc( 1, context->dataSize )))
+                {
+                    hr = E_OUTOFMEMORY;
+                    goto complete;
+                }
+                if (auth)
+                {
+                    context->dataUtf16->tokenCount = wcslen( auth );
+                    context->dataUtf16->token = (WCHAR *)(context->dataUtf16 + 1);
+                    wcscpy( (WCHAR *)context->dataUtf16->token, auth );
+                }
+                if (info.policy)
+                {
+                    if (auth)
+                    {
+                        if (!(size = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, auth, -1, NULL, 0, NULL, NULL ))) goto error;
+                        if (!(buffer = calloc( 1, size )))
+                        {
+                            hr = E_OUTOFMEMORY;
+                            goto complete;
+                        }
+                        if (!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, auth, -1, buffer, size, NULL, NULL )) goto error;
+                    }
+                    context->dataUtf16->signatureCount = 104;
+                    context->dataUtf16->signature = (WCHAR *)(context->dataUtf16 + 1) + (auth ? wcslen( auth ) * sizeof(WCHAR) : 0);
+                    if (FAILED(hr = IUser_GetSignature( &context->user->IUser_iface, info.policy->version, context->method, context->url, (auth ? buffer : ""), min( context->bodySize, info.policy->maxBodyBytes ), context->bodyBuffer, signature ))) goto complete;
+                    if (!MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, signature, 104, (WCHAR *)context->dataUtf16->signature, 104 )) goto error;
+                }
+            }
+            else
+            {
+                if (auth && !(size = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, auth, wcslen( auth ), NULL, 0, NULL, NULL ))) goto error;
+                context->dataSize = sizeof(*context->data) + size + (info.policy ? 104 : 0);
+                if (!(context->data = calloc( 1, context->dataSize )))
+                {
+                    hr = E_OUTOFMEMORY;
+                    goto complete;
+                }
+                if (auth)
+                {
+                    context->data->tokenSize = size;
+                    context->data->token = (char *)(context->data + 1);
+                    if (!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, auth, wcslen( auth ), (char *)context->data->token, size, NULL, NULL )) goto error;
+                }
+                if (info.policy)
+                {
+                    context->data->signatureSize = 104;
+                    context->data->signature = (char *)(context->data + 1) + (auth ? size : 0);
+                    if (FAILED(hr = IUser_GetSignature( &context->user->IUser_iface, info.policy->version, context->method, context->url, (auth ? context->data->token : ""), min( context->bodySize, info.policy->maxBodyBytes ), context->bodyBuffer, (char *)context->data->signature ))) goto complete;
+                    memcpy( (char *)context->data->signature, signature, 104 );
+                }
+            }
+            goto complete;
+
+        error:
+            hr = HRESULT_FROM_WIN32( GetLastError() );
+        complete:
+            IXThreadingImpl_XAsyncComplete( xthreading, data->async, hr, SUCCEEDED(hr) ? context->dataSize : 0 );
+            if (FAILED(hr) && context->data) free( context->data );
+            if (buffer) free( buffer );
+            if (auth) free( auth );
+            hr = S_OK;
+            break;
+
+        case XAsyncOp_Cleanup:
+            IUser_Release( &context->user->IUser_iface );
+            free( context );
+            break;
+
+        case XAsyncOp_Cancel:
+            break;
+    }
+
+    IXThreadingImpl_Release( xthreading );
+    return hr;
+}
+
 static HRESULT WINAPI x_user_XUserGetTokenAndSignatureAsync( IXUserImpl6 *iface, XUserHandle user, XUserGetTokenAndSignatureOptions options, const char *method, const char *url, SIZE_T headerCount, const XUserGetTokenAndSignatureHttpHeader *headers, SIZE_T bodySize, const void *bodyBuffer, XAsyncBlock *async )
 {
-    FIXME( "iface %p, user %p, options %d, method %s, url %s, headerCount %Iu, headers %p, bodySize %Iu, bodyBuffer %p, async %p stub!\n", iface, user, options, debugstr_a( method ), debugstr_a( url ), headerCount, headers, bodySize, bodyBuffer, async );
-    return E_NOTIMPL;
+    struct XUserGetTokenAndSignatureContext *context;
+    SIZE_T contextSize, headersSize = 0;
+    IXThreadingImpl *xthreading;
+    HRESULT hr;
+    char *ptr;
+
+    TRACE( "iface %p, user %p, options %d, method %s, url %s, headerCount %Iu, headers %p, bodySize %Iu, bodyBuffer %p, async %p.\n", iface, user, options, debugstr_a( method ), debugstr_a( url ), headerCount, headers, bodySize, bodyBuffer, async );
+
+    contextSize = sizeof(*context) + strlen( url ) + strlen( method ) + 2 + bodySize;
+    for (SIZE_T i = 0; i < headerCount; i++)
+        headersSize += (strlen( headers[i].value ) + 1);
+
+    if (!(context = calloc( 1, contextSize + headersSize ))) return E_OUTOFMEMORY;
+    IUser_AddRef( &user->IUser_iface );
+    context->user = user;
+    context->options = options;
+    context->headersSize = headersSize;
+    context->bodySize = bodySize;
+    context->isUtf16 = FALSE;
+
+    /* url */
+    ptr = (char *)context + sizeof(*context);
+    ptr += strlen( strcpy( (context->url = ptr), url ) ) + 1;
+    /* method */
+    ptr += (strlen( strcpy( (context->method = ptr), method ) ) + 1);
+    /* headers */
+    context->headers = ptr;
+    for (SIZE_T i = 0; i < headerCount; i++)
+        ptr += (strlen( strcpy( ptr, headers[i].value ) ) + 1);
+    /* body */
+    memcpy( (context->bodyBuffer = ptr), bodyBuffer, bodySize );
+
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) goto error;
+    hr = IXThreadingImpl_XAsyncBegin( xthreading, async, context, NULL, "XUserGetTokenAndSignatureAsync", XUserGetTokenAndSignatureProvider );
+    IXThreadingImpl_Release( xthreading );
+    if (FAILED(hr)) goto error;
+    return hr;
+error:
+    free( context );
+    IUser_Release( &user->IUser_iface );
+    return hr;
 }
 
 static HRESULT WINAPI x_user_XUserGetTokenAndSignatureResultSize( IXUserImpl6 *iface, XAsyncBlock *async, SIZE_T *bufferSize )
 {
-    FIXME( "iface %p, async %p, bufferSize %p stub!\n", iface, async, bufferSize );
-    return E_NOTIMPL;
+    IXThreadingImpl *xthreading;
+    HRESULT hr;
+
+    TRACE( "iface %p, async %p, bufferSize %p.\n", iface, async, bufferSize );
+
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+    hr = IXThreadingImpl_XAsyncGetResultSize( xthreading, async, bufferSize );
+    IXThreadingImpl_Release( xthreading );
+    return hr;
 }
 
 static HRESULT WINAPI x_user_XUserGetTokenAndSignatureResult( IXUserImpl6 *iface, XAsyncBlock *async, SIZE_T bufferSize, void *buffer, XUserGetTokenAndSignatureData **ptrToBuffer, SIZE_T *bufferUsed )
 {
-    FIXME( "iface %p, async %p, bufferSize %Iu, buffer %p, ptrToBuffer %p, bufferUsed %p stub!\n", iface, async, bufferSize, buffer, ptrToBuffer, bufferUsed );
-    return E_NOTIMPL;
+    IXThreadingImpl *xthreading;
+    HRESULT hr;
+
+    TRACE( "iface %p, async %p, bufferSize %Iu, buffer %p, ptrToBuffer %p, bufferUsed %p.\n", iface, async, bufferSize, buffer, ptrToBuffer, bufferUsed );
+
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+    hr = IXThreadingImpl_XAsyncGetResult( xthreading, async, NULL, bufferSize, buffer, bufferUsed );
+    *ptrToBuffer = (XUserGetTokenAndSignatureData *)buffer;
+    IXThreadingImpl_Release( xthreading );
+    return hr;
 }
 
 static HRESULT WINAPI x_user_XUserGetTokenAndSignatureUtf16Async( IXUserImpl6 *iface, XUserHandle user, XUserGetTokenAndSignatureOptions options, const WCHAR *method, const WCHAR *url, SIZE_T headerCount, const XUserGetTokenAndSignatureUtf16HttpHeader *headers, SIZE_T bodySize, const void *bodyBuffer, XAsyncBlock *async )
 {
-    FIXME( "iface %p, user %p, options %d, method %s, url %s, headerCount %Iu, headers %p, bodySize %Iu, bodyBuffer %p, async %p stub!\n", iface, user, options, debugstr_w( method ), debugstr_w( url ), headerCount, headers, bodySize, bodyBuffer, async );
-    return E_NOTIMPL;
+    SIZE_T contextSize, headersSize = 0, methodLen, urlLen;
+    struct XUserGetTokenAndSignatureContext *context;
+    IXThreadingImpl *xthreading;
+    HRESULT hr;
+    char *ptr;
+    int size;
+
+    TRACE( "iface %p, user %p, options %d, method %s, url %s, headerCount %Iu, headers %p, bodySize %Iu, bodyBuffer %p, async %p.\n", iface, user, options, debugstr_w( method ), debugstr_w( url ), headerCount, headers, bodySize, bodyBuffer, async );
+
+    if (!(methodLen = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, method, -1, NULL, 0, NULL, NULL ))) return HRESULT_FROM_WIN32( GetLastError() );
+    if (!(urlLen = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, url, -1, NULL, 0, NULL, NULL ))) return HRESULT_FROM_WIN32( GetLastError() );
+    contextSize = sizeof(*context) + urlLen + methodLen + bodySize;
+    for (SIZE_T i = 0; i < headerCount; i++)
+    {
+        if (!(size = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, headers[i].value, -1, NULL, 0, NULL, NULL ))) return HRESULT_FROM_WIN32( GetLastError() );
+        headersSize += size;
+    }
+
+    if (!(context = calloc( 1, contextSize + headersSize ))) return E_OUTOFMEMORY;
+    IUser_AddRef( &user->IUser_iface );
+    context->user = user;
+    context->options = options;
+    context->headersSize = headersSize;
+    context->bodySize = bodySize;
+    context->isUtf16 = TRUE;
+
+    /* url */
+    ptr = (char *)context + sizeof(*context);
+    if (!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, url, -1, ptr, urlLen, NULL, NULL )) goto error_win32;
+    ptr += urlLen;
+    /* method */
+    if (!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, method, -1, ptr, methodLen, NULL, NULL )) goto error_win32;
+    ptr += methodLen;
+    /* headers */
+    for (SIZE_T i = 0; i < headerCount; i++)
+    {
+        if (!(size = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, headers[i].value, -1, NULL, 0, NULL, NULL ))) goto error_win32;
+        if(!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, headers[i].value, -1, ptr, size, NULL, NULL )) goto error_win32;
+        ptr += size;
+    }
+    /* body */
+    memcpy( (context->bodyBuffer = ptr), bodyBuffer, bodySize );
+
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) goto error;
+    hr = IXThreadingImpl_XAsyncBegin( xthreading, async, context, NULL, "XUserGetTokenAndSignatureUtf16Async", XUserGetTokenAndSignatureProvider );
+    IXThreadingImpl_Release( xthreading );
+    if (FAILED(hr)) goto error;
+    return hr;
+
+error_win32:
+    hr = HRESULT_FROM_WIN32( GetLastError() );
+error:
+    free( context );
+    IUser_Release( &user->IUser_iface );
+    return hr;
 }
 
 static HRESULT WINAPI x_user_XUserGetTokenAndSignatureUtf16ResultSize( IXUserImpl6 *iface, XAsyncBlock *async, SIZE_T *bufferSize )
 {
-    FIXME( "iface %p, async %p, bufferSize %p stub!\n", iface, async, bufferSize );
-    return E_NOTIMPL;
+    IXThreadingImpl *xthreading;
+    HRESULT hr;
+
+    TRACE( "iface %p, async %p, bufferSize %p.\n", iface, async, bufferSize );
+
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+    hr = IXThreadingImpl_XAsyncGetResultSize( xthreading, async, bufferSize );
+    IXThreadingImpl_Release( xthreading );
+    return hr;
 }
 
 static HRESULT WINAPI x_user_XUserGetTokenAndSignatureUtf16Result( IXUserImpl6 *iface, XAsyncBlock *async, SIZE_T bufferSize, void *buffer, XUserGetTokenAndSignatureUtf16Data **ptrToBuffer, SIZE_T *bufferUsed )
 {
-    FIXME( "iface %p, async %p, bufferSize %Iu, buffer %p, ptrToBuffer %p, bufferUsed %p stub!\n", iface, async, bufferSize, buffer, ptrToBuffer, bufferUsed );
-    return E_NOTIMPL;
+    IXThreadingImpl *xthreading;
+    HRESULT hr;
+
+    TRACE( "iface %p, async %p, bufferSize %Iu, buffer %p, ptrToBuffer %p, bufferUsed %p.\n", iface, async, bufferSize, buffer, ptrToBuffer, bufferUsed );
+
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+    hr = IXThreadingImpl_XAsyncGetResult( xthreading, async, NULL, bufferSize, buffer, bufferUsed );
+    *ptrToBuffer = (XUserGetTokenAndSignatureUtf16Data *)buffer;
+    IXThreadingImpl_Release( xthreading );
+    return hr;
 }
 
 static HRESULT WINAPI x_user_XUserResolveIssueWithUiAsync( IXUserImpl6 *iface, XUserHandle user, const char *url, XAsyncBlock *async )
