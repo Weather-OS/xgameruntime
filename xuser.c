@@ -21,13 +21,86 @@
 
 #include "private.h"
 #include "userprovider.h"
+#include "util.h"
+#include <bcrypt.h>
+#include <ntdef.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(gdkc);
+
+static const WCHAR *ACCEPT_JSON[] = { L"application/json", NULL };
+
+static HRESULT parse_json( const char *json, SIZE_T jsonLen, IJsonObject **object )
+{
+    static const WCHAR *name = RuntimeClass_Windows_Data_Json_JsonValue;
+    IJsonValueStatics *statics;
+    HSTRING_HEADER header;
+    IJsonValue *value;
+    UINT32 wJsonLen;
+    HSTRING string;
+    WCHAR *wJson;
+    HRESULT hr;
+
+    TRACE( "json %s, object %p.\n", debugstr_an( json, jsonLen ), object );
+
+    if (!(wJsonLen = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, json, jsonLen, NULL, 0 ))) return HRESULT_FROM_WIN32( GetLastError() );
+    if (FAILED(hr = WindowsCreateStringReference( name, wcslen( name ), &header, &string ))) return hr;
+    if (FAILED(hr = RoGetActivationFactory( string, &IID_IJsonValueStatics, (void **)&statics ))) return hr;
+    if (!(wJson = calloc( wJsonLen + 1, sizeof(WCHAR) )))
+    {
+        IJsonValueStatics_Release( statics );
+        return E_OUTOFMEMORY;
+    }
+
+    if (!MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, json, jsonLen, wJson, wJsonLen + 1 )) goto error;
+    if (FAILED(hr = WindowsCreateStringReference( wJson, wJsonLen + 1, &header, &string ))) goto cleanup;
+    if (FAILED(hr = IJsonValueStatics_Parse( statics, string, &value ))) goto cleanup;
+    hr = IJsonValue_GetObject( value, object );
+    IJsonValue_Release( value );
+    goto cleanup;
+
+error:
+    hr = HRESULT_FROM_WIN32( GetLastError() );
+cleanup:
+    IJsonValueStatics_Release( statics );
+    free( wJson );
+    return hr;
+}
+
+struct policy
+{
+    UINT32 version;
+    UINT32 maxBodyBytes;
+};
+
+struct endpoint
+{
+    char *protocol;
+    char *host;
+    char *path;
+    char *relyingParty;
+    char *tokenType;
+    struct policy *policy;
+    BOOL wildcard;
+};
 
 struct XUser
 {
     IUser IUser_iface;
     LONG ref;
+
+    BCRYPT_KEY_HANDLE key;
+    char *proofKey;
+    char *userToken;
+    UINT64 xuid;
+    UINT32 policiesLen;
+    UINT32 endpointsLen;
+    struct policy *policies;
+    struct endpoint *endpoints;
+
+    char gamertag[16];
+    char modernGamertag[97];
+    char modernGamertagSuffix[15];
+    char uniqueModernGamertag[101];
 };
 
 static inline struct XUser *impl_from_IUser( IUser *iface )
@@ -48,14 +121,210 @@ static ULONG WINAPI user_Release( IUser *iface )
     struct XUser *impl = impl_from_IUser( iface );
     ULONG ref = InterlockedDecrement( &impl->ref );
     TRACE( "iface %p decreasing refcount to %lu.\n", iface, ref );
-    if (!ref) free( impl );
+    if (!ref)
+    {
+        if (impl->key) BCryptDestroyKey( impl->key );
+        if (impl->proofKey) free( impl->proofKey );
+        if (impl->userToken) free( impl->userToken );
+        if (impl->policies) free( impl->policies );
+        if (impl->endpoints) free( impl->endpoints );
+    }
     return ref;
+}
+
+static HRESULT get_rps_tickets( BOOLEAN allowUi, char **userTicket, char **deviceTicket )
+{
+    FIXME( "allowUi %d, userTicket %p, deviceTicket %p stub!\n", allowUi, userTicket, deviceTicket );
+    return E_NOTIMPL;
+}
+
+static HRESULT device_auth( XUserHandle user, const char *deviceTicket, char **deviceToken )
+{
+    static const char template[] = "{\"RelyingParty\":\"http://auth.xboxlive.com\",\"TokenType\":\"JWT\",\"Properties\":{\"AuthMethod\":\"RPS\",\"SiteName\":\"user.auth.xboxlive.com\",\"ProofKey\":";
+    SIZE_T size = ARRAY_SIZE( template ) + strlen( user->proofKey ) + strlen( ",\"RpsTicket\":\"\"}" ) + strlen( deviceTicket );
+    WCHAR header[116] = { 'S', 'i', 'g', 'n', 'a', 't', 'u', 'r', 'e', ':', ' ' };
+    IJsonObject *object = NULL;
+    const WCHAR *tokenBuffer;
+    HSTRING token = NULL;
+    UCHAR *buffer = NULL;
+    char signature[104];
+    UINT32 tokenSize;
+    HRESULT hr;
+    char *body;
+
+    TRACE( "user %p, deviceTicket %p, deviceToken %p.\n", user, deviceTicket, deviceToken );
+
+    if (!(body = calloc( 1, size ))) return E_OUTOFMEMORY;
+    strcpy( body, template );
+    strcat( body, user->proofKey );
+    strcat( body, ",\"RpsTicket\":\"" );
+    strcat( body, deviceTicket );
+    strcat( body, "\"}" );
+    if (FAILED(hr = IUser_GetSignature( &user->IUser_iface, 1, "POST", "https://device.auth.xboxlive.com/device/authenticate", "", size, body, signature ))) goto cleanup;
+    if (!MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, signature, 104, header + 11, 104 )) goto error;
+    if (FAILED(hr = http_request( L"POST", L"https://device.auth.xboxlive.com/device/authenticate", body, header, ACCEPT_JSON, &buffer, &size ))) goto cleanup;
+    if (FAILED(hr = parse_json( (char *)buffer, size, &object ))) goto cleanup;
+    if (FAILED(hr = get_json_string( object, L"Token", &token ))) goto cleanup;
+    tokenBuffer = WindowsGetStringRawBuffer( token, NULL );
+    if (!(size = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, tokenBuffer, -1, NULL, 0, NULL, NULL ))) goto error;
+    if (!(*deviceToken = calloc( 1, size )))
+    {
+        hr = E_OUTOFMEMORY;
+        goto cleanup;
+    }
+    if (!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, tokenBuffer, -1, *deviceToken, tokenSize, NULL, NULL )) goto error;
+    goto cleanup;
+
+error:
+    hr = HRESULT_FROM_WIN32( GetLastError() );
+cleanup:
+    if (FAILED(hr) && *deviceToken) free( *deviceToken );
+    if (object) IJsonObject_Release( object );
+    if (token) WindowsDeleteString( token );
+    if (buffer) free( buffer );
+    free( body );
+    return hr;
+}
+
+static HRESULT sisu_auth( XUserHandle user, const char *userTicket, const char *deviceToken, WCHAR **auth )
+{
+    static const char template[] = "{\"Sandbox\":\"RETAIL\",\"UseModernGamertag\":true,\"DeviceToken\":\"";
+    SIZE_T size = ARRAY_SIZE( template ) + strlen( deviceToken ) + strlen( "\",\"AccessToken\":\"\"}" ) + strlen( userTicket );
+    HSTRING authToken = NULL, gtg = NULL, mgs = NULL, mgt = NULL, umg = NULL, userToken = NULL, xid = NULL;
+    IJsonObject *authObject = NULL, *claims = NULL, *identity = NULL, *object = NULL, *userObject = NULL;
+    WCHAR header[116] = { 'S', 'i', 'g', 'n', 'a', 't', 'u', 'r', 'e', ':', ' ' };
+    char *body, signature[104];
+    const WCHAR *stringBuffer;
+    IJsonArray *xui = NULL;
+    UCHAR *buffer = NULL;
+    HRESULT hr;
+
+    TRACE( "user %p, userTicket %p, deviceToken %p, auth %p.\n", user, userTicket, deviceToken, auth );
+
+    if (!(body = calloc( 1, size ))) return E_OUTOFMEMORY;
+    strcpy( body, template );
+    strcat( body, deviceToken );
+    strcat( body, "\",\"AccessToken\":\"" );
+    strcat( body, userTicket );
+    strcat( body, "\"}" );
+    if (FAILED(hr = IUser_GetSignature( &user->IUser_iface, 1, "POST", "https://sisu.auth.xboxlive.com/authorize", "", size, body, signature ))) goto cleanup;
+    if (!MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, signature, 104, header + 11, 104 )) goto error;
+    if (FAILED(hr = http_request( L"POST", L"https://sisu.auth.xboxlive.com/authorize", body, header, ACCEPT_JSON, &buffer, &size ))) goto cleanup;
+    if (FAILED(hr = parse_json( (char *)buffer, size, &object ))) goto cleanup;
+    if (FAILED(hr = get_json_object( object, L"UserToken", &userObject ))) goto cleanup;
+    if (FAILED(hr = get_json_string( userObject, L"Token", &userToken ))) goto cleanup;
+    stringBuffer = WindowsGetStringRawBuffer( userToken, NULL );
+    if (!(size = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, stringBuffer, -1, NULL, 0, NULL, NULL ))) goto error;
+    if (!(user->userToken = calloc( 1, size )))
+    {
+        hr = E_OUTOFMEMORY;
+        goto cleanup;
+    }
+    if (!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, stringBuffer, -1, user->userToken, size, NULL, NULL )) goto error;
+    if (FAILED(hr = get_json_object( object, L"AuthorizationToken", &authObject ))) goto cleanup;
+    if (FAILED(hr = get_json_object( authObject, L"DisplayClaims", &claims ))) goto cleanup;
+    if (FAILED(hr = get_json_array( claims, L"xui", &xui ))) goto cleanup;
+    if (FAILED(hr = IJsonArray_GetObjectAt( xui, 0, &identity ))) goto cleanup;
+    if (FAILED(hr = get_json_string( identity, L"xid", &xid ))) goto cleanup;
+    stringBuffer = WindowsGetStringRawBuffer( xid, NULL );
+    user->xuid = wcstoull( stringBuffer, NULL, 10 );
+    if (FAILED(hr = get_json_string( identity, L"gtg", &gtg ))) goto cleanup;
+    stringBuffer = WindowsGetStringRawBuffer( gtg, NULL );
+    if (!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, stringBuffer, -1, user->gamertag, 16, NULL, NULL )) goto error;
+    if (FAILED(hr = get_json_string( identity, L"mgt", &mgt ))) goto cleanup;
+    stringBuffer = WindowsGetStringRawBuffer( mgt, NULL );
+    if (!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, stringBuffer, -1, user->modernGamertag, 97, NULL, NULL )) goto error;
+    if (SUCCEEDED(hr = get_json_string( identity, L"mgs", &mgs )))
+    {
+        stringBuffer = WindowsGetStringRawBuffer( mgs, NULL );
+        if (!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, stringBuffer, -1, user->modernGamertagSuffix, 15, NULL, NULL )) goto error;
+    }
+    else if (hr != WEB_E_JSON_VALUE_NOT_FOUND) goto cleanup;
+    if (FAILED(hr = get_json_string( identity, L"umg", &umg ))) goto cleanup;
+    stringBuffer = WindowsGetStringRawBuffer( umg, NULL );
+    if (!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, stringBuffer, -1, user->uniqueModernGamertag, 101, NULL, NULL )) goto error;
+    if (FAILED(hr = get_json_string( authObject, L"Token", &authToken ))) goto cleanup;
+    stringBuffer = WindowsGetStringRawBuffer( authToken, NULL );
+    if (!(*auth = calloc( wcslen( L"Authorization: XBL3.0 x=-;" ) + wcslen( stringBuffer ) + 1, sizeof(WCHAR) )))
+    {
+        hr = E_OUTOFMEMORY;
+        goto cleanup;
+    }
+    wcscpy( *auth, L"Authorization: XBL3.0 x=-;" );
+    wcscat( *auth, stringBuffer );
+    goto cleanup;
+
+error:
+    hr = HRESULT_FROM_WIN32( GetLastError() );
+cleanup:
+    if (authObject) IJsonObject_Release( authObject );
+    if (userObject) IJsonObject_Release( userObject );
+    if (authToken) WindowsDeleteString( authToken );
+    if (userToken) WindowsDeleteString( userToken );
+    if (identity) IJsonObject_Release( identity );
+    if (claims) IJsonObject_Release( claims );
+    if (object) IJsonObject_Release( object );
+    if (gtg) WindowsDeleteString( gtg );
+    if (mgs) WindowsDeleteString( mgs );
+    if (mgt) WindowsDeleteString( mgt );
+    if (umg) WindowsDeleteString( umg );
+    if (xid) WindowsDeleteString( xid );
+    if (xui) IJsonArray_Release( xui );
+    if (buffer) free( buffer );
+    free( body );
+    return hr;
+}
+
+static HRESULT load_endpoints( XUserHandle user, BYTE *buffer, SIZE_T size )
+{
+    FIXME( "user %p, buffer %p, size %Iu stub!\n", user, buffer, size );
+    return E_NOTIMPL;
 }
 
 static HRESULT WINAPI user_Initialize( IUser *iface, const XUserAddOptions options )
 {
-    FIXME( "iface %p, options %d stub!\n", iface, options );
-    return E_NOTIMPL;
+    static char proofKeyTemplate[] = "{\"alg\":\"ES256\",\"crv\":\"P-256\",\"kty\":\"EC\",\"use\":\"sig\",\"x\":\"";
+    static const SIZE_T proofKeySize = ARRAY_SIZE( proofKeyTemplate ) + strlen( "\",\"y\":\"\"}" ) + 86;
+    BYTE blob[sizeof(BCRYPT_ECCKEY_BLOB) + 64], *currentBuffer = NULL, *defaultBuffer = NULL;
+    char *deviceTicket = NULL, *deviceToken = NULL, *userTicket = NULL, *x, *y;
+    struct XUser *impl = impl_from_IUser( iface );
+    WCHAR *auth = NULL;
+    NTSTATUS status;
+    SIZE_T size;
+    ULONG dummy;
+    HRESULT hr;
+
+    TRACE( "iface %p.\n", iface );
+
+    /* generate signing key pair and convert public key to jwk */
+    if (!NT_SUCCESS(status = BCryptGenerateKeyPair( BCRYPT_ECDSA_P256_ALG_HANDLE, &impl->key, 256, 0 ))) return HRESULT_FROM_NT( status );
+    if (!NT_SUCCESS(status = BCryptFinalizeKeyPair( impl->key, 0 ))) return HRESULT_FROM_NT( status );
+    if (!NT_SUCCESS(status = BCryptExportKey( impl->key, NULL, BCRYPT_ECCPUBLIC_BLOB, blob, sizeof(blob), &dummy, 0 ))) return HRESULT_FROM_NT( status );
+    if (!(impl->proofKey = calloc( 1, proofKeySize ))) return E_OUTOFMEMORY;
+    x = impl->proofKey + ARRAY_SIZE( proofKeyTemplate ) - 1;
+    y = x + 43 + strlen( "\",\"y\":\"" );
+    strcpy( impl->proofKey, proofKeyTemplate );
+    if (FAILED(hr = encode_base64_url( 32, blob + sizeof(BCRYPT_ECCKEY_BLOB), 43, x, FALSE ))) return hr;
+    strcat( impl->proofKey, "\",\"y\":\"" );
+    if (FAILED(hr = encode_base64_url( 32, blob + sizeof(BCRYPT_ECCKEY_BLOB) + 32, 43, y, FALSE ))) return hr;
+    strcat( impl->proofKey, "}" );
+
+    if (FAILED(hr = http_request( L"GET", L"https://title.mgt.xboxlive.com/titles/default/endpoints?type=1", NULL, NULL, ACCEPT_JSON, &defaultBuffer, &size ))) return hr;
+    if (FAILED(hr = load_endpoints( impl, defaultBuffer, size ))) goto cleanup;
+    if (FAILED(hr = get_rps_tickets( options & XUserAddOptions_AddDefaultUserAllowingUI, &userTicket, &deviceTicket ))) goto cleanup;
+    if (FAILED(hr = device_auth( impl, deviceTicket, &deviceToken ))) goto cleanup;
+    if (FAILED(hr = sisu_auth( impl, userTicket, deviceToken, &auth ))) goto cleanup;
+    if (FAILED(hr = http_request( L"GET", L"https://title.mgt.xboxlive.com/titles/current/endpoints", NULL, auth, ACCEPT_JSON, &currentBuffer, &size ))) goto cleanup;
+    if (FAILED(hr = load_endpoints( impl, currentBuffer, size ))) goto cleanup;
+
+cleanup:
+    if (currentBuffer) free( currentBuffer );
+    if (defaultBuffer) free( defaultBuffer );
+    if (deviceTicket) free( deviceTicket );
+    if (deviceToken) free( deviceToken );
+    if (userTicket) free( userTicket );
+    if (auth) free( auth );
+    return S_OK;
 }
 
 static HRESULT WINAPI user_GetEndpointInfo( IUser *iface, const char *url, struct endpoint *info )
@@ -279,8 +548,9 @@ static HRESULT WINAPI x_user_XUserFindUserByLocalId( IXUserImpl6 *iface, XUserLo
 
 static HRESULT WINAPI x_user_XUserGetId( IXUserImpl6 *iface, XUserHandle user, UINT64 *userId )
 {
-    FIXME( "iface %p, user %p, userId %p stub!\n", iface, user, userId );
-    return E_NOTIMPL;
+    TRACE( "iface %p, user %p, userId %p.\n", iface, user, userId );
+    *userId = user->xuid;
+    return S_OK;
 }
 
 static HRESULT WINAPI x_user_XUserFindUserById( IXUserImpl6 *iface, UINT64 userId, XUserHandle *handle )
