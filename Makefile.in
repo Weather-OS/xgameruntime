@@ -1,6 +1,6 @@
 MODULE    = xgameruntime.dll
 EXTRAINCL = -I$(srcdir)/include $(XML2_PE_CFLAGS)
-IMPORTS   = combase shlwapi $(XML2_PE_LIBS)
+IMPORTS   = combase shlwapi winhttp $(XML2_PE_LIBS)
 
 SOURCES = \
 	include/xaccessibility.idl \
@@ -25,6 +25,7 @@ SOURCES = \
 	include/xuser.idl \
 	main.c \
 	userprovider.idl \
+	util.c \
 	xaccessibility.c \
 	xappcapture.c \
 	xdisplay.c \
