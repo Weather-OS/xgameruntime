@@ -20,8 +20,73 @@
  */
 
 #include "private.h"
+#include "userprovider.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(gdkc);
+
+struct XUser
+{
+    IUser IUser_iface;
+    LONG ref;
+};
+
+static inline struct XUser *impl_from_IUser( IUser *iface )
+{
+    return CONTAINING_RECORD( iface, struct XUser, IUser_iface );
+}
+
+static ULONG WINAPI user_AddRef( IUser *iface )
+{
+    struct XUser *impl = impl_from_IUser( iface );
+    ULONG ref = InterlockedIncrement( &impl->ref );
+    TRACE( "iface %p increasing refcount to %lu.\n", iface, ref );
+    return ref;
+}
+
+static ULONG WINAPI user_Release( IUser *iface )
+{
+    struct XUser *impl = impl_from_IUser( iface );
+    ULONG ref = InterlockedDecrement( &impl->ref );
+    TRACE( "iface %p decreasing refcount to %lu.\n", iface, ref );
+    if (!ref) free( impl );
+    return ref;
+}
+
+static HRESULT WINAPI user_Initialize( IUser *iface, const XUserAddOptions options )
+{
+    FIXME( "iface %p, options %d stub!\n", iface, options );
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI user_GetEndpointInfo( IUser *iface, const char *url, struct endpoint *info )
+{
+    FIXME( "iface %p, url %s, info %p stub!\n", iface, debugstr_a( url ), info );
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI user_GetAuthorization( IUser *iface, const char *relyingParty, WCHAR **auth )
+{
+    FIXME( "iface %p, relyingParty %s, auth %p stub!\n", iface, debugstr_a( relyingParty ), auth );
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI user_GetSignature( IUser *iface, UINT32 version, const char *method, const char *url, const char *auth, UINT32 bodySize, const void *body, char signature[104] )
+{
+    FIXME( "iface %p, version %u, method %s, url %s, auth %s, bodySize %u, body %p, signature %p stub!\n", iface, version, debugstr_a( method ), debugstr_a( url ), debugstr_a( auth ), bodySize, body, signature );
+    return E_NOTIMPL;
+}
+
+static const struct IUserVtbl user_vtbl =
+{
+    NULL,
+    user_AddRef,
+    user_Release,
+    /* IUser methods */
+    user_Initialize,
+    user_GetEndpointInfo,
+    user_GetAuthorization,
+    user_GetSignature,
+};
 
 struct x_user
 {
@@ -83,13 +148,16 @@ static ULONG WINAPI x_user_Release( IXUserImpl6 *iface )
 
 static HRESULT WINAPI x_user_XUserDuplicateHandle( IXUserImpl6 *iface, XUserHandle handle, XUserHandle *duplicatedHandle )
 {
-    FIXME( "iface %p, handle %p, duplicatedHandle %p stub!\n", iface, handle, duplicatedHandle );
-    return E_NOTIMPL;
+    TRACE( "iface %p, handle %p, duplicatedHandle %p.\n", iface, handle, duplicatedHandle );
+    IUser_AddRef( &handle->IUser_iface );
+    *duplicatedHandle = handle;
+    return S_OK;
 }
 
 static void WINAPI x_user_XUserCloseHandle( IXUserImpl6 *iface, XUserHandle user )
 {
-    FIXME( "iface %p, user %p stub!\n", iface, user );
+    TRACE( "iface %p, user %p.\n", iface, user );
+    IUser_Release( &user->IUser_iface );
 }
 
 static INT32 WINAPI x_user_XUserCompare( IXUserImpl6 *iface, XUserHandle user1, XUserHandle user2 )
@@ -105,16 +173,96 @@ static HRESULT WINAPI x_user_XUserGetMaxUsers( IXUserImpl6 *iface, UINT32 *maxUs
     return S_OK;
 }
 
+struct XUserAddContext
+{
+    XUserAddOptions options;
+    XUserHandle user;
+};
+
+static HRESULT WINAPI XUserAddProvider( XAsyncOp op, const XAsyncProviderData *data )
+{
+    struct XUserAddContext *context;
+    IXThreadingImpl *xthreading;
+    HRESULT hr;
+
+    TRACE( "op %d, data %p.\n", op, data );
+
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+    context = (struct XUserAddContext *)data->context;
+
+    switch (op)
+    {
+        case XAsyncOp_Begin:
+            hr = IXThreadingImpl_XAsyncSchedule( xthreading, data->async, 0 );
+            break;
+
+        case XAsyncOp_GetResult:
+            memcpy( data->buffer, &context->user, sizeof(XUserHandle) );
+            break;
+
+        case XAsyncOp_DoWork:
+            if (!(context->user = calloc( 1, sizeof(*context->user) )))
+            {
+                hr = E_OUTOFMEMORY;
+                goto complete;
+            }
+            context->user->IUser_iface.lpVtbl = &user_vtbl;
+            context->user->ref = 1;
+            hr = IUser_Initialize( &context->user->IUser_iface, context->options );
+
+        complete:
+            IXThreadingImpl_XAsyncComplete( xthreading, data->async, hr, SUCCEEDED(hr) ? sizeof(XUserHandle) : 0 );
+            if (FAILED(hr) && context->user) IUser_Release( &context->user->IUser_iface );
+            hr = S_OK;
+            break;
+
+        case XAsyncOp_Cleanup:
+            free( context );
+            break;
+
+        case XAsyncOp_Cancel:
+            break;
+    }
+
+    IXThreadingImpl_Release( xthreading );
+    return hr;
+}
+
 static HRESULT WINAPI x_user_XUserAddAsync( IXUserImpl6 *iface, XUserAddOptions options, XAsyncBlock *async )
 {
-    FIXME( "iface %p, options %d, async %p stub!\n", iface, options, async );
-    return E_NOTIMPL;
+    struct XUserAddContext *context;
+    IXThreadingImpl *xthreading;
+    HRESULT hr;
+
+    TRACE( "iface %p, options %d, async %p.\n", iface, options, async );
+
+    if (!async) return E_POINTER;
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+    if (!(context = calloc( 1, sizeof(*context) )))
+    {
+        IXThreadingImpl_Release( xthreading );
+        return E_OUTOFMEMORY;
+    }
+
+    context->options = options;
+    hr = IXThreadingImpl_XAsyncBegin( xthreading, async, context, NULL, "XUserAddAsync", XUserAddProvider );
+    IXThreadingImpl_Release( xthreading );
+    if (FAILED(hr)) free( context );
+    return hr;
 }
 
 static HRESULT WINAPI x_user_XUserAddResult( IXUserImpl6 *iface, XAsyncBlock *async, XUserHandle *newUser )
 {
-    FIXME( "iface %p, async %p, newUser %p stub!\n", iface, async, newUser );
-    return E_NOTIMPL;
+    IXThreadingImpl *xthreading;
+    HRESULT hr;
+
+    TRACE( "iface %p, async %p, newUser %p.\n", iface, async, newUser );
+
+    if (!async || !newUser) return E_POINTER;
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+    hr = IXThreadingImpl_XAsyncGetResult( xthreading, async, NULL, sizeof(*newUser), newUser, NULL );
+    IXThreadingImpl_Release( xthreading );
+    return hr;
 }
 
 static HRESULT WINAPI x_user_XUserGetLocalId( IXUserImpl6 *iface, XUserHandle user, XUserLocalId *userLocalId )

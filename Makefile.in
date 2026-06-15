@@ -24,6 +24,7 @@ SOURCES = \
 	include/xsystem.idl \
 	include/xuser.idl \
 	main.c \
+	userprovider.idl \
 	xaccessibility.c \
 	xappcapture.c \
 	xdisplay.c \
