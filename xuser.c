@@ -1133,8 +1133,36 @@ static ULONG WINAPI x_user_gamertag_Release( IXUserGamertagImpl *iface )
 
 static HRESULT WINAPI x_user_gamertag_XUserGetGamertag( IXUserGamertagImpl *iface, XUserHandle user, XUserGamertagComponent gamertagComponent, SIZE_T gamertagSize, char *gamertag, SIZE_T *gamertagUsed )
 {
-    FIXME( "iface %p, user %p, gamertagComponent %d, gamertagSize %Iu, gamertag %p, gamertagUsed %p stub!\n", iface, user, gamertagComponent, gamertagSize, gamertag, gamertagUsed );
-    return E_NOTIMPL;
+    TRACE( "iface %p, user %p, gamertagComponent %d, gamertagSize %Iu, gamertag %p, gamertagUsed %p.\n", iface, user, gamertagComponent, gamertagSize, gamertag, gamertagUsed );
+
+    switch (gamertagComponent)
+    {
+        case XUserGamertagComponent_Classic:
+            if (gamertagSize <= strlen( user->gamertag )) return HRESULT_FROM_WIN32( ERROR_INSUFFICIENT_BUFFER );
+            strcpy( gamertag, user->gamertag );
+            if (gamertagUsed) *gamertagUsed = strlen( user->gamertag ) + 1;
+            return S_OK;
+
+        case XUserGamertagComponent_Modern:
+            if (gamertagSize <= strlen( user->modernGamertag )) return HRESULT_FROM_WIN32( ERROR_INSUFFICIENT_BUFFER );
+            strcpy( gamertag, user->modernGamertag );
+            if (gamertagUsed) *gamertagUsed = strlen( user->modernGamertag ) + 1;
+            return S_OK;
+
+        case XUserGamertagComponent_ModernSuffix:
+            if (gamertagSize <= strlen( user->modernGamertagSuffix )) return HRESULT_FROM_WIN32( ERROR_INSUFFICIENT_BUFFER );
+            strcpy( gamertag, user->modernGamertagSuffix );
+            if (gamertagUsed) *gamertagUsed = strlen( user->modernGamertagSuffix ) + 1;
+            return S_OK;
+
+        case XUserGamertagComponent_UniqueModern:
+            if (gamertagSize <= strlen( user->uniqueModernGamertag )) return HRESULT_FROM_WIN32( ERROR_INSUFFICIENT_BUFFER );
+            strcpy( gamertag, user->uniqueModernGamertag );
+            if (gamertagUsed) *gamertagUsed = strlen( user->uniqueModernGamertag ) + 1;
+            return S_OK;
+    }
+
+    return E_INVALIDARG;
 }
 
 static const struct IXUserGamertagImplVtbl x_user_gamertag_vtbl =
