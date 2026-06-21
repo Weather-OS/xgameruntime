@@ -695,22 +695,171 @@ static HRESULT WINAPI __PADDING__( IXUserImpl6 *iface )
     return E_NOTIMPL;
 }
 
+struct XUserGetGamerPictureContext
+{
+    XUserHandle user;
+    XUserGamerPictureSize pictureSize;
+    SIZE_T bufferSize;
+    BYTE *buffer;
+};
+
+static HRESULT WINAPI XUserGetGamerPictureProvider( XAsyncOp op, const XAsyncProviderData *data )
+{
+    IJsonObject *object = NULL, *profile = NULL, *setting = NULL;
+    static const WCHAR *accept[] = { L"image/png", NULL };
+    WCHAR *auth = NULL, *headers = NULL, *url = NULL;
+    IJsonArray *profiles = NULL, *settings = NULL;
+    struct XUserGetGamerPictureContext *context;
+    const WCHAR *suffix, *valueBuffer;
+    IXThreadingImpl *xthreading;
+    HSTRING value = NULL;
+    BYTE *buffer = NULL;
+    SIZE_T size;
+    HRESULT hr;
+
+    TRACE( "op %d, data %p.\n", op, data );
+
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+    context = (struct XUserGetGamerPictureContext *)data->context;
+
+    switch (op)
+    {
+        case XAsyncOp_Begin:
+            hr = IXThreadingImpl_XAsyncSchedule( xthreading, data->async, 0 );
+            break;
+
+        case XAsyncOp_GetResult:
+            memcpy( data->buffer, context->buffer, context->bufferSize );
+            break;
+
+        case XAsyncOp_DoWork:
+            switch (context->pictureSize)
+            {
+                case XUserGamerPictureSize_Small:
+                    suffix = L"&format=png&w=64&h=64";
+                    break;
+                case XUserGamerPictureSize_Medium:
+                    suffix = L"&format=png&w=208&h=208";
+                    break;
+                case XUserGamerPictureSize_Large:
+                    suffix = L"&format=png&w=424&h=424";
+                    break;
+                case XUserGamerPictureSize_ExtraLarge:
+                    suffix = L"&format=png&w=1080&h=1080";
+                    break;
+                default:
+                    hr = E_INVALIDARG;
+                    goto cleanup;
+            }
+
+            if (FAILED(hr = IUser_GetAuthorization( &context->user->IUser_iface, "http://xboxlive.com", &auth ))) goto cleanup;
+            if (!(headers = calloc( wcslen( L"Authorization: " ) + wcslen( auth ) + 1, sizeof(WCHAR) )))
+            {
+                hr = E_OUTOFMEMORY;
+                goto cleanup;
+            }
+            wcscpy( headers, L"Authorization: " );
+            wcscat( headers, auth );
+            if (FAILED(hr = http_request( L"GET", L"https://profile.xboxlive.com/users/me/profile/settings?settings=PublicGamerpic", NULL, headers, ACCEPT_JSON, &buffer, &size ))) goto cleanup;
+            if (FAILED(hr = parse_json( (char *)buffer, size, &object ))) goto cleanup;
+            if (FAILED(hr = get_json_array( object, L"profileUsers", &profiles ))) goto cleanup;
+            if (FAILED(hr = IJsonArray_GetObjectAt( profiles, 0, &profile ))) goto cleanup;
+            if (FAILED(hr = get_json_array( profile, L"settings", &settings ))) goto cleanup;
+            if (FAILED(hr = IJsonArray_GetObjectAt( settings, 0, &setting ))) goto cleanup;
+            if (FAILED(hr = get_json_string( setting, L"value", &value ))) goto cleanup;
+            valueBuffer = WindowsGetStringRawBuffer( value, NULL );
+            if (!(url = calloc( wcslen( valueBuffer ) + wcslen( suffix ) + 1, sizeof(WCHAR) )))
+            {
+                hr = E_OUTOFMEMORY;
+                goto cleanup;
+            }
+
+            wcscpy( url, valueBuffer );
+            wcscat( url, suffix );
+            hr = http_request( L"GET", url, NULL, NULL, accept, &context->buffer, &context->bufferSize );
+
+        cleanup:
+            IXThreadingImpl_XAsyncComplete( xthreading, data->async, hr, SUCCEEDED(hr) ? context->bufferSize : 0 );
+            if (profiles) IJsonArray_Release( profiles );
+            if (settings) IJsonArray_Release( settings );
+            if (profile) IJsonObject_Release( profile );
+            if (setting) IJsonObject_Release( setting );
+            if (object) IJsonObject_Release( object );
+            if (value) WindowsDeleteString( value );
+            if (headers) free( headers );
+            if (buffer) free( buffer );
+            if (auth) free( auth );
+            if (url) free( url );
+            hr = S_OK;
+            break;
+
+        case XAsyncOp_Cleanup:
+            IUser_Release( &context->user->IUser_iface );
+            if (context->buffer) free( context->buffer );
+            free( context );
+            break;
+
+        case XAsyncOp_Cancel:
+            break;
+    }
+
+    IXThreadingImpl_Release( xthreading );
+    return hr;
+}
+
 static HRESULT WINAPI x_user_XUserGetGamerPictureAsync( IXUserImpl6 *iface, XUserHandle user, XUserGamerPictureSize pictureSize, XAsyncBlock *async )
 {
-    FIXME( "iface %p, user %p, pictureSize %d, async %p stub!\n", iface, user, pictureSize, async );
-    return E_NOTIMPL;
+    struct XUserGetGamerPictureContext *context;
+    IXThreadingImpl *xthreading;
+    HRESULT hr;
+
+    TRACE( "iface %p, user %p, pictureSize %d, async %p.\n", iface, user, pictureSize, async );
+
+    if (!user || !async) return E_POINTER;
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+    if (!(context = calloc( 1, sizeof(*context) )))
+    {
+        IXThreadingImpl_Release( xthreading );
+        return E_OUTOFMEMORY;
+    }
+
+    context->pictureSize = pictureSize;
+    if (FAILED(hr = IXUserImpl6_XUserDuplicateHandle( iface, user, &context->user )))
+    {
+        IXThreadingImpl_Release( xthreading );
+        return hr;
+    }
+
+    hr = IXThreadingImpl_XAsyncBegin( xthreading, async, context, NULL, "XUserGetGamerPictureAsync", XUserGetGamerPictureProvider );
+    IXThreadingImpl_Release( xthreading );
+    if (FAILED(hr)) free( context );
+    return hr;
 }
 
 static HRESULT WINAPI x_user_XUserGetGamerPictureResultSize( IXUserImpl6 *iface, XAsyncBlock *async, SIZE_T *bufferSize )
 {
-    FIXME( "iface %p, async %p, bufferSize %p stub!\n", iface, async, bufferSize );
-    return E_NOTIMPL;
+    IXThreadingImpl *xthreading;
+    HRESULT hr;
+
+    TRACE( "iface %p, async %p, bufferSize %p.\n", iface, async, bufferSize );
+
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+    hr = IXThreadingImpl_XAsyncGetResultSize( xthreading, async, bufferSize );
+    IXThreadingImpl_Release( xthreading );
+    return hr;
 }
 
 static HRESULT WINAPI x_user_XUserGetGamerPictureResult( IXUserImpl6 *iface, XAsyncBlock *async, SIZE_T bufferSize, void *buffer, SIZE_T *bufferUsed )
 {
-    FIXME( "iface %p, async %p, bufferSize %Iu, buffer %p, bufferUsed %p stub!\n", iface, async, bufferSize, buffer, bufferUsed );
-    return E_NOTIMPL;
+    IXThreadingImpl *xthreading;
+    HRESULT hr;
+
+    TRACE( "iface %p, async %p, bufferSize %Iu, buffer %p, bufferUsed %p.\n", iface, async, bufferSize, buffer, bufferUsed );
+
+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+    hr = IXThreadingImpl_XAsyncGetResult( xthreading, async, NULL, bufferSize, buffer, bufferUsed );
+    IXThreadingImpl_Release( xthreading );
+    return hr;
 }
 
 static HRESULT WINAPI x_user_XUserGetAgeGroup( IXUserImpl6 *iface, XUserHandle user, XUserAgeGroup *ageGroup )
