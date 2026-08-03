@@ -355,8 +355,62 @@ static HRESULT WINAPI user_GetEndpointInfo( IUser *iface, const char *url, struc
 
 static HRESULT WINAPI user_GetAuthorization( IUser *iface, const char *relyingParty, WCHAR **auth )
 {
-    FIXME( "iface %p, relyingParty %s, auth %p stub!\n", iface, debugstr_a( relyingParty ), auth );
-    return E_NOTIMPL;
+    static const char template[] = "{\"TokenType\":\"JWT\",\"Properties\":{\"SandboxId\":\"RETAIL\",\"ProofKey\":";
+    IJsonObject *identity = NULL, *claims = NULL, *object = NULL;
+    struct XUser *impl = impl_from_IUser( iface );
+    const WCHAR *tokenBuffer, *uhsBuffer;
+    HSTRING token = NULL, uhs = NULL;
+    IJsonArray *xui = NULL;
+    BYTE *buffer = NULL;
+    SIZE_T bufferSize;
+    char *body = NULL;
+    HRESULT hr;
+
+    TRACE( "iface %p, relyingParty %s, auth %p.\n", iface, debugstr_a( relyingParty ), auth );
+
+    /* request xsts token */
+    if (!(body = calloc( 1, ARRAY_SIZE( template ) + strlen( impl->proofKey ) + strlen( ",\"UserTokens\":[\"\"]},\"RelyingParty\":\"\"}" ) + strlen( impl->userToken ) + strlen( relyingParty ) )))
+        return E_OUTOFMEMORY;
+    strcpy( body, template );
+    strcat( body, impl->proofKey );
+    strcat( body, ",\"UserTokens\":[\"" );
+    strcat( body, impl->userToken );
+    strcat( body, "\"]},\"RelyingParty\":\"" );
+    strcat( body, relyingParty );
+    strcat( body, "\"}" );
+    hr = http_request( L"POST", L"https://xsts.auth.xboxlive.com/xsts/authorize", body, NULL, ACCEPT_JSON, &buffer, &bufferSize );
+    if (FAILED(hr)) return hr;
+
+    /* construct auth header from user hash and token */
+    hr = parse_json( (char *)buffer, bufferSize, &object );
+    if (FAILED(hr)) return hr;
+    if (FAILED(hr = get_json_string( object, L"Token", &token ))) goto cleanup;
+    tokenBuffer = WindowsGetStringRawBuffer( token, NULL );
+    if (FAILED(hr = get_json_object( object, L"DisplayClaims", &claims ))) goto cleanup;
+    if (FAILED(hr = get_json_array( claims, L"xui", &xui ))) goto cleanup;
+    if (FAILED(hr = IJsonArray_GetObjectAt( xui, 0, &identity ))) goto cleanup;
+    if (FAILED(hr = get_json_string( identity, L"uhs", &uhs ))) goto cleanup;
+    uhsBuffer = WindowsGetStringRawBuffer( uhs, NULL );
+    if (!(*auth = calloc( wcslen( L"XBL3.0 x=;" ) + wcslen( uhsBuffer ) + wcslen( tokenBuffer ) + 1, sizeof(WCHAR) )))
+    {
+        hr = E_OUTOFMEMORY;
+        goto cleanup;
+    }
+    wcscpy( *auth, L"XBL3.0 x=" );
+    wcscat( *auth, uhsBuffer );
+    wcscat( *auth, L";" );
+    wcscat( *auth, tokenBuffer );
+
+cleanup:
+    if (identity) IJsonObject_Release( identity );
+    if (claims) IJsonObject_Release( claims );
+    if (object) IJsonObject_Release( object );
+    if (token) WindowsDeleteString( token );
+    if (uhs) WindowsDeleteString( uhs );
+    if (xui) IJsonArray_Release( xui );
+    if (buffer) free( buffer );
+    if (body) free( body );
+    return hr;
 }
 
 static HRESULT WINAPI user_GetSignature( IUser *iface, UINT32 version, const char *method, const char *url, const char *auth, UINT32 bodySize, const void *body, char signature[104] )
