@@ -415,8 +415,52 @@ cleanup:
 
 static HRESULT WINAPI user_GetSignature( IUser *iface, UINT32 version, const char *method, const char *url, const char *auth, UINT32 bodySize, const void *body, char signature[104] )
 {
-    FIXME( "iface %p, version %u, method %s, url %s, auth %s, bodySize %u, body %p, signature %p stub!\n", iface, version, debugstr_a( method ), debugstr_a( url ), debugstr_a( auth ), bodySize, body, signature );
-    return E_NOTIMPL;
+    UCHAR hash[32], rawSignature[76] = { (version >> 24) & 0xff, (version >> 16) & 0xff, (version >> 8) & 0xff, version & 0xff };
+    URL_COMPONENTSA uc = { .dwStructSize = sizeof(URL_COMPONENTSA), .dwUrlPathLength = -1, .dwExtraInfoLength = -1 };
+    struct XUser *impl = impl_from_IUser( iface );
+    ULONG dataBufferSize, dummy;
+    UCHAR *dataBuffer, *ptr;
+    FILETIME timestamp;
+    NTSTATUS status;
+    HRESULT hr;
+
+    TRACE( "iface %p, version %d, method %s, url %s, auth %p, bodySize %d, body %p, signature %p.\n", iface, version, debugstr_a( method ), debugstr_a( url ), auth, bodySize, body, signature );
+
+    if (!InternetCrackUrlA( url, 0, 0, &uc )) return HRESULT_FROM_WIN32( GetLastError() );
+    dataBufferSize = 18 + strlen( method ) + uc.dwUrlPathLength + uc.dwExtraInfoLength + strlen( auth ) + bodySize;
+
+    /* filetime */
+    GetSystemTimeAsFileTime( &timestamp );
+    rawSignature[4]  = (timestamp.dwHighDateTime >> 24) & 0xff;
+    rawSignature[5]  = (timestamp.dwHighDateTime >> 16) & 0xff;
+    rawSignature[6]  = (timestamp.dwHighDateTime >> 8 ) & 0xff;
+    rawSignature[7]  =  timestamp.dwHighDateTime        & 0xff;
+    rawSignature[8]  = (timestamp.dwLowDateTime  >> 24) & 0xff;
+    rawSignature[9]  = (timestamp.dwLowDateTime  >> 16) & 0xff;
+    rawSignature[10] = (timestamp.dwLowDateTime  >> 8 ) & 0xff;
+    rawSignature[11] =  timestamp.dwLowDateTime         & 0xff;
+
+    /* signature content */
+    if (!(dataBuffer = calloc( 1, dataBufferSize ) )) return E_OUTOFMEMORY;
+    memcpy( dataBuffer, rawSignature, 4 );
+    memcpy( dataBuffer + 5, rawSignature + 4, 8 );
+    ptr = dataBuffer + 14;
+    while (*method) *(ptr++) = toupper( *(method++) );
+    ptr += strlen( memcpy( ptr + 1, uc.lpszUrlPath, uc.dwUrlPathLength + uc.dwExtraInfoLength ) );
+    memcpy( ptr + 2, body, bodySize );
+
+    /* sign hash of signature content */
+    if (!NT_SUCCESS(status = BCryptHash( BCRYPT_SHA256_ALG_HANDLE, NULL, 0, dataBuffer, dataBufferSize, hash, 32 ))) goto error;
+    if (!NT_SUCCESS(status = BCryptSignHash( impl->key, NULL, hash, 32, rawSignature + 12, 64, &dummy, 0 ))) goto error;
+
+    hr = encode_base64( 76, rawSignature, 104, signature, TRUE );
+    goto cleanup;
+
+error:
+    hr = HRESULT_FROM_NT( status );
+cleanup:
+    free( dataBuffer );
+    return hr;
 }
 
 static const struct IUserVtbl user_vtbl =
