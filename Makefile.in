@@ -1,6 +1,6 @@
 MODULE    = xgameruntime.dll
 EXTRAINCL = -I$(srcdir)/include $(XML2_PE_CFLAGS)
-IMPORTS   = bcrypt combase shlwapi winhttp $(XML2_PE_LIBS)
+IMPORTS   = bcrypt combase dbghelp shlwapi winhttp wininet $(XML2_PE_LIBS)
 
 SOURCES = \
 	include/xaccessibility.idl \

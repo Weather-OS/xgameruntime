@@ -23,7 +23,9 @@
 #include "userprovider.h"
 #include "util.h"
 #include <bcrypt.h>
+#include <dbghelp.h>
 #include <ntdef.h>
+#include <wininet.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(gdkc);
 
@@ -329,8 +331,26 @@ cleanup:
 
 static HRESULT WINAPI user_GetEndpointInfo( IUser *iface, const char *url, struct endpoint *info )
 {
-    FIXME( "iface %p, url %s, info %p stub!\n", iface, debugstr_a( url ), info );
-    return E_NOTIMPL;
+    URL_COMPONENTSA uc = { .dwStructSize = sizeof(URL_COMPONENTSA), .dwSchemeLength = -1, .dwHostNameLength = -1, .dwUrlPathLength = -1 };
+    struct XUser *impl = impl_from_IUser( iface );
+
+    TRACE( "iface %p, url %s, info %p.\n", iface, debugstr_a( url ), info );
+
+    if (!InternetCrackUrlA( url, 0, 0, &uc )) return HRESULT_FROM_WIN32( GetLastError() );
+    TRACE( "scheme %s, hostName %s, path %s.\n", debugstr_an( uc.lpszScheme, uc.dwSchemeLength ), debugstr_an( uc.lpszHostName, uc.dwHostNameLength ), debugstr_an( uc.lpszUrlPath, uc.dwUrlPathLength ) );
+
+    for (UINT32 i = 0; i < impl->endpointsLen; i++)
+    {
+        if ((impl->endpoints[i].wildcard ? SymMatchString( uc.lpszHostName, impl->endpoints[i].host, FALSE )
+             : !strncmp( uc.lpszHostName, impl->endpoints[i].host, max( uc.dwHostNameLength, strlen( impl->endpoints[i].host ) ) ) ) &&
+            !strncmp( uc.lpszScheme, impl->endpoints[i].protocol, max( uc.dwSchemeLength, strlen( impl->endpoints[i].protocol ) ) ) &&
+            (impl->endpoints[i].path ? !strncmp( uc.lpszUrlPath, impl->endpoints[i].path, max( uc.dwUrlPathLength, strlen( impl->endpoints[i].path ) ) ) : 1 ))
+        {
+            *info = impl->endpoints[i];
+            return S_OK;
+        }
+    }
+    return E_FAIL;
 }
 
 static HRESULT WINAPI user_GetAuthorization( IUser *iface, const char *relyingParty, WCHAR **auth )
