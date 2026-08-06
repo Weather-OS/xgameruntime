@@ -76,11 +76,11 @@ struct policy
 
 struct endpoint
 {
-    char *protocol;
-    char *host;
-    char *path;
-    char *relyingParty;
-    char *tokenType;
+    HSTRING protocol;
+    HSTRING host;
+    HSTRING path;
+    HSTRING relyingParty;
+    HSTRING tokenType;
     struct policy *policy;
     BOOL wildcard;
 };
@@ -129,7 +129,16 @@ static ULONG WINAPI user_Release( IUser *iface )
         if (impl->proofKey) free( impl->proofKey );
         if (impl->userToken) free( impl->userToken );
         if (impl->policies) free( impl->policies );
-        if (impl->endpoints) free( impl->endpoints );
+        if (impl->endpoints) {
+            for(UINT32 i = 0; i < impl->endpointsLen; i++) {
+                WindowsDeleteString(impl->endpoints[i].protocol);
+                WindowsDeleteString(impl->endpoints[i].host);
+                WindowsDeleteString(impl->endpoints[i].path);
+                WindowsDeleteString(impl->endpoints[i].relyingParty);
+                WindowsDeleteString(impl->endpoints[i].tokenType);
+            }
+            free( impl->endpoints );
+        }
     }
     return ref;
 }
@@ -279,8 +288,98 @@ cleanup:
 
 static HRESULT load_endpoints( XUserHandle user, BYTE *buffer, SIZE_T size )
 {
-    FIXME( "user %p, buffer %p, size %Iu stub!\n", user, buffer, size );
-    return E_NOTIMPL;
+    IJsonObject *payload = NULL, *tmpObject = NULL;
+    IJsonArray *jsonEndpoints = NULL, *jsonPolicies = NULL;
+    IVector_IJsonValue *jsonEndpointsVector = NULL, *jsonPoliciesVector = NULL;
+    struct policy *policyCursor = NULL;
+    struct endpoint *endpointCursor = NULL;
+    DOUBLE jsonNumber;
+    UINT32 arraySize;
+    INT32 comparison;
+    HSTRING hostType = NULL, hostTypeWildCard = NULL;
+    HRESULT hr = S_OK;
+
+    TRACE( "user %p, buffer %p, size %Iu \n", user, buffer, size );
+
+    if (FAILED(hr = parse_json(buffer, size, &payload))) return hr;
+    if (FAILED(hr = get_json_array(payload, L"EndPoints", &jsonEndpoints))) goto cleanup;
+    if (FAILED(get_json_array(payload, L"SignaturePolicies", &jsonPolicies))) jsonPolicies = NULL;
+
+    if (jsonPolicies) {
+        if (FAILED(hr = IJsonArray_QueryInterface(jsonPolicies, &IID_IVector_IJsonValue, &jsonPoliciesVector))) goto cleanup;
+        if (FAILED(hr = IVector_IJsonValue_get_Size(jsonPoliciesVector, &arraySize))) goto cleanup;
+        
+        if (!(policyCursor = realloc(user->policies, sizeof(struct policy) * (user->policiesLen + arraySize)))) {
+            hr = E_OUTOFMEMORY;
+            goto cleanup;
+        }
+        user->policies = policyCursor;
+        policyCursor = user->policies + user->policiesLen;
+        user->policiesLen = user->policiesLen + arraySize;
+        
+        for (UINT32 i = 0; i < arraySize; i++) {
+            if (FAILED(hr = IJsonArray_GetObjectAt(jsonPolicies, i, &tmpObject))) goto cleanup;
+
+            if (FAILED(hr = get_json_number(tmpObject, L"Version", &jsonNumber))) goto cleanup;
+            (*(policyCursor + i)).version = (UINT32)jsonNumber;
+            if (FAILED(hr = get_json_number(tmpObject, L"MaxBodyBytes", &jsonNumber))) goto cleanup;
+            (*(policyCursor + i)).maxBodyBytes = (UINT32)jsonNumber;
+
+            IJsonObject_Release(tmpObject);
+            tmpObject = NULL;
+        }
+    }
+
+    if (FAILED(hr = IJsonArray_QueryInterface(jsonEndpoints, &IID_IVector_IJsonValue, &jsonEndpointsVector))) goto cleanup;
+    if (FAILED(hr = IVector_IJsonValue_get_Size(jsonEndpointsVector, &arraySize))) goto cleanup;
+
+    if (!(endpointCursor = realloc(user->endpoints, sizeof(struct endpoint) * (user->endpointsLen + arraySize)))) {
+        hr = E_OUTOFMEMORY;
+        goto cleanup;
+    }
+    user->endpoints = endpointCursor;
+    endpointCursor = user->endpoints + user->endpointsLen;
+    user->endpointsLen = user->endpointsLen + arraySize;
+    memset(endpointCursor, 0, sizeof(struct endpoint) * arraySize);
+
+    if (FAILED(hr = WindowsCreateString(L"wildcard", 8, &hostTypeWildCard))) goto cleanup;
+    for (UINT32 i = 0; i < arraySize; i++) {
+        if (FAILED(hr = IJsonArray_GetObjectAt(jsonEndpoints, i, &tmpObject))) goto cleanup;
+
+        if (FAILED(hr = get_json_string(tmpObject, L"Protocol", &(*endpointCursor + i).protocol))) goto cleanup;
+        if (FAILED(hr = get_json_string(tmpObject, L"Host", &(*endpointCursor + i).host) )) goto cleanup;
+        if (FAILED(get_json_string(tmpObject, L"Path", &(*endpointCursor + i).path))) (*endpointCursor + i).path = NULL;
+        
+        if (FAILED(get_json_string(tmpObject, L"RelyingParty", &(*endpointCursor + i).relyingParty))) (*endpointCursor + i).relyingParty = NULL;
+        if (FAILED(get_json_string(tmpObject, L"TokenType", &(*endpointCursor + i).tokenType))) (*endpointCursor + i).tokenType = NULL;
+        if (SUCCEEDED(get_json_number(tmpObject, L"SignaturePolicyIndex", &jsonNumber)) && jsonNumber < user->policiesLen) {
+            (*endpointCursor + i).policy = policyCursor + (UINT32)jsonNumber;
+        } else {
+            (*endpointCursor + i).policy = NULL;
+        }
+        if (SUCCEEDED(get_json_string(tmpObject, L"HostType", &hostType))) {
+            WindowsCompareStringOrdinal(hostType, hostTypeWildCard, &comparison);
+            (*endpointCursor + i).wildcard = comparison == 0;
+            WindowsDeleteString(hostType);
+            hostType = NULL;
+        } else {
+            (*endpointCursor + i).wildcard = FALSE;
+        }
+        
+        IJsonObject_Release(tmpObject);
+        tmpObject = NULL;
+    }
+
+cleanup:
+    if (jsonPoliciesVector) IVector_IJsonValue_Release(jsonPoliciesVector);
+    if (jsonEndpointsVector) IVector_IJsonValue_Release(jsonEndpointsVector);
+    if (jsonEndpoints) IJsonArray_Release(jsonEndpoints);
+    if (tmpObject) IJsonObject_Release(tmpObject);
+    if (jsonPolicies) IJsonArray_Release(jsonPolicies);
+    if (payload) IJsonObject_Release(payload);
+    if (hostTypeWildCard) WindowsDeleteString(hostTypeWildCard);
+
+    return hr;
 }
 
 static HRESULT WINAPI user_Initialize( IUser *iface, const XUserAddOptions options )
@@ -326,7 +425,7 @@ cleanup:
     if (deviceToken) free( deviceToken );
     if (userTicket) free( userTicket );
     if (auth) free( auth );
-    return S_OK;
+    return hr;
 }
 
 static HRESULT WINAPI user_GetEndpointInfo( IUser *iface, const char *url, struct endpoint *info )
