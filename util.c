@@ -30,6 +30,7 @@ HRESULT http_request( const WCHAR *method, const WCHAR *url, char *data, const W
     HINTERNET connection = NULL, request = NULL, session = NULL;
     DWORD size = sizeof( DWORD ), status;
     WCHAR *hostName = NULL;
+    UCHAR *tmpBuffer = NULL;
     HRESULT hr = S_OK;
 
     TRACE( "method %s, url %s, data %s, headers %s, accept %p, buffer %p, bufferSize %p.\n",
@@ -59,15 +60,17 @@ HRESULT http_request( const WCHAR *method, const WCHAR *url, char *data, const W
     /* buffer response data */
     *bufferSize = 0;
     *buffer = NULL;
+    tmpBuffer = NULL;
     do
     {
         if (!WinHttpQueryDataAvailable( request, &size )) goto error;
         if (!size) break;
-        if (!(*buffer = realloc( *buffer, *bufferSize + size )))
+        if (!(tmpBuffer = realloc( *buffer, *bufferSize + size )))
         {
             hr = E_OUTOFMEMORY;
             goto cleanup;
         }
+        *buffer = tmpBuffer;
 
         if (!WinHttpReadData( request, *buffer + *bufferSize, size, &size )) goto error;
         *bufferSize += size;
