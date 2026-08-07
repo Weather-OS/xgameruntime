@@ -35,6 +35,6 @@ interface IUser : IUnknown
 {
     HRESULT Initialize( [in] const XUserAddOptions options );
     HRESULT GetEndpointInfo( [in, string] const char *url, [out] struct endpoint *info );
-    HRESULT GetAuthorization( [in, string] const char *relyingParty, [out, string] WCHAR **auth );
+    HRESULT GetAuthorization( [in, string] const WCHAR *relyingParty, [out, string] WCHAR **auth );
     HRESULT GetSignature( [in] UINT32 version, [in, string] const char *method, [in, string] const char *url, [in, string] const char *auth, [in] UINT32 bodySize, [in, size_is(bodySize)] const void *body, [out, size_is(104)] char *signature );
 }

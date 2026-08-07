@@ -295,8 +295,8 @@ static HRESULT load_endpoints( XUserHandle user, BYTE *buffer, SIZE_T size )
     struct endpoint *endpointCursor = NULL;
     DOUBLE jsonNumber;
     UINT32 arraySize;
-    INT32 comparison;
-    HSTRING hostType = NULL, hostTypeWildCard = NULL;
+    HSTRING hostType = NULL;
+    const WCHAR* hostTypeRaw = NULL;
     HRESULT hr = S_OK;
 
     TRACE( "user %p, buffer %p, size %Iu \n", user, buffer, size );
@@ -358,8 +358,8 @@ static HRESULT load_endpoints( XUserHandle user, BYTE *buffer, SIZE_T size )
             (*endpointCursor + i).policy = NULL;
         }
         if (SUCCEEDED(get_json_string(tmpObject, L"HostType", &hostType))) {
-            WindowsCompareStringOrdinal(hostType, hostTypeWildCard, &comparison);
-            (*endpointCursor + i).wildcard = comparison == 0;
+            hostTypeRaw = WindowsGetStringRawBuffer(hostType, NULL);
+            (*endpointCursor + i).wildcard = wcscmp(hostTypeRaw, L"wildcard") == 0;
             WindowsDeleteString(hostType);
             hostType = NULL;
         } else {
@@ -377,7 +377,6 @@ cleanup:
     if (tmpObject) IJsonObject_Release(tmpObject);
     if (jsonPolicies) IJsonArray_Release(jsonPolicies);
     if (payload) IJsonObject_Release(payload);
-    if (hostTypeWildCard) WindowsDeleteString(hostTypeWildCard);
 
     return hr;
 }
@@ -430,29 +429,43 @@ cleanup:
 
 static HRESULT WINAPI user_GetEndpointInfo( IUser *iface, const char *url, struct endpoint *info )
 {
-    URL_COMPONENTSA uc = { .dwStructSize = sizeof(URL_COMPONENTSA), .dwSchemeLength = -1, .dwHostNameLength = -1, .dwUrlPathLength = -1 };
+    URL_COMPONENTSW uc = { .dwStructSize = sizeof(URL_COMPONENTSW), .dwSchemeLength = -1, .dwHostNameLength = -1, .dwUrlPathLength = -1 };
+    const WCHAR *host = NULL, *protocol = NULL, *path = NULL;
+    WCHAR *urlW = NULL;
+    INT32 urlWSize = 0;
     struct XUser *impl = impl_from_IUser( iface );
 
     TRACE( "iface %p, url %s, info %p.\n", iface, debugstr_a( url ), info );
 
-    if (!InternetCrackUrlA( url, 0, 0, &uc )) return HRESULT_FROM_WIN32( GetLastError() );
-    TRACE( "scheme %s, hostName %s, path %s.\n", debugstr_an( uc.lpszScheme, uc.dwSchemeLength ), debugstr_an( uc.lpszHostName, uc.dwHostNameLength ), debugstr_an( uc.lpszUrlPath, uc.dwUrlPathLength ) );
+    if (!(urlWSize = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, url, -1, NULL, 0))) return HRESULT_FROM_WIN32( GetLastError() );
+    if (!(urlW = calloc(urlWSize, sizeof(WCHAR)))) return E_OUTOFMEMORY;
+    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, url, -1, urlW, urlWSize)) goto error;
+
+    if (!InternetCrackUrlW( urlW, 0, 0, &uc )) goto error;
+    TRACE( "scheme %s, hostName %s, path %s.\n", debugstr_wn( uc.lpszScheme, uc.dwSchemeLength ), debugstr_wn( uc.lpszHostName, uc.dwHostNameLength ), debugstr_wn( uc.lpszUrlPath, uc.dwUrlPathLength ) );
 
     for (UINT32 i = 0; i < impl->endpointsLen; i++)
     {
-        if ((impl->endpoints[i].wildcard ? SymMatchString( uc.lpszHostName, impl->endpoints[i].host, FALSE )
-             : !strncmp( uc.lpszHostName, impl->endpoints[i].host, max( uc.dwHostNameLength, strlen( impl->endpoints[i].host ) ) ) ) &&
-            !strncmp( uc.lpszScheme, impl->endpoints[i].protocol, max( uc.dwSchemeLength, strlen( impl->endpoints[i].protocol ) ) ) &&
-            (impl->endpoints[i].path ? !strncmp( uc.lpszUrlPath, impl->endpoints[i].path, max( uc.dwUrlPathLength, strlen( impl->endpoints[i].path ) ) ) : 1 ))
+        host = WindowsGetStringRawBuffer(impl->endpoints[i].host, NULL);
+        protocol = WindowsGetStringRawBuffer(impl->endpoints[i].protocol, NULL);
+        path = WindowsGetStringRawBuffer(impl->endpoints[i].path, NULL);
+
+        if ((impl->endpoints[i].wildcard ? SymMatchStringW( uc.lpszHostName, host, FALSE )
+             : !wcsncmp( uc.lpszHostName, host, max( uc.dwHostNameLength, wcslen( host ) ) ) ) &&
+            !wcsncmp( uc.lpszScheme, protocol, max( uc.dwSchemeLength, wcslen( protocol ) ) ) &&
+            (impl->endpoints[i].path ? !wcsncmp( uc.lpszUrlPath, path, max( uc.dwUrlPathLength, wcslen( path ) ) ) : 1 ))
         {
             *info = impl->endpoints[i];
+            free(urlW);
             return S_OK;
         }
     }
+error:
+    if (urlW) free(urlW);
     return E_FAIL;
 }
 
-static HRESULT WINAPI user_GetAuthorization( IUser *iface, const char *relyingParty, WCHAR **auth )
+static HRESULT WINAPI user_GetAuthorization( IUser *iface, const WCHAR *relyingParty, WCHAR **auth )
 {
     static const char template[] = "{\"TokenType\":\"JWT\",\"Properties\":{\"SandboxId\":\"RETAIL\",\"ProofKey\":";
     IJsonObject *identity = NULL, *claims = NULL, *object = NULL;
@@ -461,28 +474,33 @@ static HRESULT WINAPI user_GetAuthorization( IUser *iface, const char *relyingPa
     HSTRING token = NULL, uhs = NULL;
     IJsonArray *xui = NULL;
     BYTE *buffer = NULL;
-    SIZE_T bufferSize;
+    SIZE_T bufferSize, relyingPartySize;
     char *body = NULL;
     HRESULT hr;
 
-    TRACE( "iface %p, relyingParty %s, auth %p.\n", iface, debugstr_a( relyingParty ), auth );
+    TRACE( "iface %p, relyingParty %s, auth %p.\n", iface, debugstr_w( relyingParty ), auth );
+    if (!(relyingPartySize = WideCharToMultiByte(CP_UTF8, MB_ERR_INVALID_CHARS, relyingParty, -1, NULL, 0, NULL, NULL))) return HRESULT_FROM_WIN32( GetLastError() );
 
     /* request xsts token */
-    if (!(body = calloc( 1, ARRAY_SIZE( template ) + strlen( impl->proofKey ) + strlen( ",\"UserTokens\":[\"\"]},\"RelyingParty\":\"\"}" ) + strlen( impl->userToken ) + strlen( relyingParty ) )))
+    if (!(body = calloc( 1, ARRAY_SIZE( template ) + strlen( impl->proofKey ) + strlen( ",\"UserTokens\":[\"\"]},\"RelyingParty\":\"\"}" ) + strlen( impl->userToken ) + (relyingPartySize - 1) )))
         return E_OUTOFMEMORY;
     strcpy( body, template );
     strcat( body, impl->proofKey );
     strcat( body, ",\"UserTokens\":[\"" );
     strcat( body, impl->userToken );
     strcat( body, "\"]},\"RelyingParty\":\"" );
-    strcat( body, relyingParty );
+    // Add relyingParty
+    if (!WideCharToMultiByte(CP_UTF8, MB_ERR_INVALID_CHARS, relyingParty, -1, body + strlen(body), relyingPartySize, NULL, NULL)) {
+        hr = HRESULT_FROM_WIN32( GetLastError() );
+        goto cleanup;
+    }
     strcat( body, "\"}" );
     hr = http_request( L"POST", L"https://xsts.auth.xboxlive.com/xsts/authorize", body, NULL, ACCEPT_JSON, &buffer, &bufferSize );
-    if (FAILED(hr)) return hr;
+    if (FAILED(hr)) goto cleanup;
 
     /* construct auth header from user hash and token */
     hr = parse_json( (char *)buffer, bufferSize, &object );
-    if (FAILED(hr)) return hr;
+    if (FAILED(hr)) goto cleanup;
     if (FAILED(hr = get_json_string( object, L"Token", &token ))) goto cleanup;
     tokenBuffer = WindowsGetStringRawBuffer( token, NULL );
     if (FAILED(hr = get_json_object( object, L"DisplayClaims", &claims ))) goto cleanup;
@@ -851,7 +869,7 @@ static HRESULT WINAPI XUserGetGamerPictureProvider( XAsyncOp op, const XAsyncPro
                     goto cleanup;
             }
 
-            if (FAILED(hr = IUser_GetAuthorization( &context->user->IUser_iface, "http://xboxlive.com", &auth ))) goto cleanup;
+            if (FAILED(hr = IUser_GetAuthorization( &context->user->IUser_iface, L"http://xboxlive.com", &auth ))) goto cleanup;
             if (!(headers = calloc( wcslen( L"Authorization: " ) + wcslen( auth ) + 1, sizeof(WCHAR) )))
             {
                 hr = E_OUTOFMEMORY;
@@ -1031,7 +1049,7 @@ static HRESULT WINAPI XUserGetTokenAndSignatureProvider( XAsyncOp op, const XAsy
 
         case XAsyncOp_DoWork:
             if (FAILED(hr = IUser_GetEndpointInfo( &context->user->IUser_iface, context->url, &info ))) goto complete;
-            if (info.tokenType && FAILED(hr = IUser_GetAuthorization( &context->user->IUser_iface, info.relyingParty, &auth ))) goto complete;
+            if (info.tokenType && FAILED(hr = IUser_GetAuthorization( &context->user->IUser_iface, WindowsGetStringRawBuffer(info.relyingParty, NULL), &auth ))) goto complete;
 
             if (context->isUtf16)
             {
