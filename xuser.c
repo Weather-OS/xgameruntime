@@ -152,12 +152,12 @@ static HRESULT get_rps_tickets( BOOLEAN allowUi, char **userTicket, char **devic
 static HRESULT device_auth( XUserHandle user, const char *deviceTicket, char **deviceToken )
 {
     static const char template[] = "{\"RelyingParty\":\"http://auth.xboxlive.com\",\"TokenType\":\"JWT\",\"Properties\":{\"AuthMethod\":\"RPS\",\"SiteName\":\"user.auth.xboxlive.com\",\"ProofKey\":";
-    SIZE_T size = ARRAY_SIZE( template ) + strlen( user->proofKey ) + strlen( ",\"RpsTicket\":\"\"}" ) + strlen( deviceTicket );
+    SIZE_T size = ARRAY_SIZE( template ) + strlen( user->proofKey ) + strlen( ",\"RpsTicket\":\"\"}}" ) + strlen( deviceTicket );
     WCHAR header[116] = { 'S', 'i', 'g', 'n', 'a', 't', 'u', 'r', 'e', ':', ' ' };
     IJsonObject *object = NULL;
     const WCHAR *tokenBuffer;
     HSTRING token = NULL;
-    UCHAR *buffer = NULL;
+    BYTE *buffer = NULL;
     char signature[104];
     HRESULT hr;
     char *body;
@@ -169,8 +169,8 @@ static HRESULT device_auth( XUserHandle user, const char *deviceTicket, char **d
     strcat( body, user->proofKey );
     strcat( body, ",\"RpsTicket\":\"" );
     strcat( body, deviceTicket );
-    strcat( body, "\"}" );
-    if (FAILED(hr = IUser_GetSignature( &user->IUser_iface, 1, "POST", "https://device.auth.xboxlive.com/device/authenticate", "", size, body, signature ))) goto cleanup;
+    strcat( body, "\"}}" );
+    if (FAILED(hr = IUser_GetSignature( &user->IUser_iface, 1, "POST", "https://device.auth.xboxlive.com/device/authenticate", "", size - 1, body, signature ))) goto cleanup;
     if (!MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, signature, 104, header + 11, 104 )) goto error;
     if (FAILED(hr = http_request( L"POST", L"https://device.auth.xboxlive.com/device/authenticate", body, header, ACCEPT_JSON, &buffer, &size ))) goto cleanup;
     if (FAILED(hr = parse_json( (char *)buffer, size, &object ))) goto cleanup;
@@ -206,7 +206,7 @@ static HRESULT sisu_auth( XUserHandle user, const char *userTicket, const char *
     char *body, signature[104];
     const WCHAR *stringBuffer;
     IJsonArray *xui = NULL;
-    UCHAR *buffer = NULL;
+    BYTE *buffer = NULL;
     HRESULT hr;
 
     TRACE( "user %p, userTicket %p, deviceToken %p, auth %p.\n", user, userTicket, deviceToken, auth );
@@ -217,9 +217,10 @@ static HRESULT sisu_auth( XUserHandle user, const char *userTicket, const char *
     strcat( body, "\",\"AccessToken\":\"" );
     strcat( body, userTicket );
     strcat( body, "\"}" );
-    if (FAILED(hr = IUser_GetSignature( &user->IUser_iface, 1, "POST", "https://sisu.auth.xboxlive.com/authorize", "", size, body, signature ))) goto cleanup;
+    if (FAILED(hr = IUser_GetSignature( &user->IUser_iface, 1, "POST", "https://sisu.xboxlive.com/authorize", "", size - 1, body, signature ))) goto cleanup;
     if (!MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, signature, 104, header + 11, 104 )) goto error;
-    if (FAILED(hr = http_request( L"POST", L"https://sisu.auth.xboxlive.com/authorize", body, header, ACCEPT_JSON, &buffer, &size ))) goto cleanup;
+    if (FAILED(hr = http_request( L"POST", L"https://sisu.xboxlive.com/authorize", body, header, ACCEPT_JSON, &buffer, &size ))) goto cleanup;
+
     if (FAILED(hr = parse_json( (char *)buffer, size, &object ))) goto cleanup;
     if (FAILED(hr = get_json_object( object, L"UserToken", &userObject ))) goto cleanup;
     if (FAILED(hr = get_json_string( userObject, L"Token", &userToken ))) goto cleanup;
@@ -405,7 +406,7 @@ static HRESULT WINAPI user_Initialize( IUser *iface, const XUserAddOptions optio
     if (FAILED(hr = encode_base64_url( 32, blob + sizeof(BCRYPT_ECCKEY_BLOB), 43, x, FALSE ))) return hr;
     strcat( impl->proofKey, "\",\"y\":\"" );
     if (FAILED(hr = encode_base64_url( 32, blob + sizeof(BCRYPT_ECCKEY_BLOB) + 32, 43, y, FALSE ))) return hr;
-    strcat( impl->proofKey, "}" );
+    strcat( impl->proofKey, "\"}" );
 
     if (FAILED(hr = http_request( L"GET", L"https://title.mgt.xboxlive.com/titles/default/endpoints?type=1", NULL, NULL, ACCEPT_JSON, &defaultBuffer, &size ))) return hr;
     if (FAILED(hr = load_endpoints( impl, defaultBuffer, size ))) goto cleanup;
@@ -530,11 +531,11 @@ cleanup:
 
 static HRESULT WINAPI user_GetSignature( IUser *iface, UINT32 version, const char *method, const char *url, const char *auth, UINT32 bodySize, const void *body, char signature[104] )
 {
-    UCHAR hash[32], rawSignature[76] = { (version >> 24) & 0xff, (version >> 16) & 0xff, (version >> 8) & 0xff, version & 0xff };
+    BYTE hash[32], rawSignature[76] = { (version >> 24) & 0xff, (version >> 16) & 0xff, (version >> 8) & 0xff, version & 0xff };
     URL_COMPONENTSA uc = { .dwStructSize = sizeof(URL_COMPONENTSA), .dwUrlPathLength = -1, .dwExtraInfoLength = -1 };
     struct XUser *impl = impl_from_IUser( iface );
     ULONG dataBufferSize, dummy;
-    UCHAR *dataBuffer, *ptr;
+    BYTE *dataBuffer, *ptr;
     FILETIME timestamp;
     NTSTATUS status;
     HRESULT hr;
@@ -561,8 +562,9 @@ static HRESULT WINAPI user_GetSignature( IUser *iface, UINT32 version, const cha
     memcpy( dataBuffer + 5, rawSignature + 4, 8 );
     ptr = dataBuffer + 14;
     while (*method) *(ptr++) = toupper( *(method++) );
-    ptr += strlen( memcpy( ptr + 1, uc.lpszUrlPath, uc.dwUrlPathLength + uc.dwExtraInfoLength ) );
-    memcpy( ptr + 2, body, bodySize );
+    ptr += strlen( memcpy( ptr + 1, uc.lpszUrlPath, uc.dwUrlPathLength + uc.dwExtraInfoLength ) ) + 2;
+    ptr += strlen( memcpy( ptr, auth, strlen( auth ) ) ) + 1;
+    memcpy( ptr, body, bodySize );
 
     /* sign hash of signature content */
     if (!NT_SUCCESS(status = BCryptHash( BCRYPT_SHA256_ALG_HANDLE, NULL, 0, dataBuffer, dataBufferSize, hash, 32 ))) goto error;
