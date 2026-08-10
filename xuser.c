@@ -159,7 +159,6 @@ static HRESULT device_auth( XUserHandle user, const char *deviceTicket, char **d
     HSTRING token = NULL;
     UCHAR *buffer = NULL;
     char signature[104];
-    UINT32 tokenSize;
     HRESULT hr;
     char *body;
 
@@ -183,7 +182,7 @@ static HRESULT device_auth( XUserHandle user, const char *deviceTicket, char **d
         hr = E_OUTOFMEMORY;
         goto cleanup;
     }
-    if (!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, tokenBuffer, -1, *deviceToken, tokenSize, NULL, NULL )) goto error;
+    if (!WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, tokenBuffer, -1, *deviceToken, size, NULL, NULL )) goto error;
     goto cleanup;
 
 error:
@@ -301,14 +300,14 @@ static HRESULT load_endpoints( XUserHandle user, BYTE *buffer, SIZE_T size )
 
     TRACE( "user %p, buffer %p, size %Iu \n", user, buffer, size );
 
-    if (FAILED(hr = parse_json(buffer, size, &payload))) return hr;
+    if (FAILED(hr = parse_json((char *)buffer, size, &payload))) return hr;
     if (FAILED(hr = get_json_array(payload, L"EndPoints", &jsonEndpoints))) goto cleanup;
     if (FAILED(get_json_array(payload, L"SignaturePolicies", &jsonPolicies))) jsonPolicies = NULL;
 
     if (jsonPolicies) {
-        if (FAILED(hr = IJsonArray_QueryInterface(jsonPolicies, &IID_IVector_IJsonValue, &jsonPoliciesVector))) goto cleanup;
+        if (FAILED(hr = IJsonArray_QueryInterface(jsonPolicies, &IID_IVector_IJsonValue, (void **)&jsonPoliciesVector))) goto cleanup;
         if (FAILED(hr = IVector_IJsonValue_get_Size(jsonPoliciesVector, &arraySize))) goto cleanup;
-        
+
         if (!(policyCursor = realloc(user->policies, sizeof(struct policy) * (user->policiesLen + arraySize)))) {
             hr = E_OUTOFMEMORY;
             goto cleanup;
@@ -316,7 +315,7 @@ static HRESULT load_endpoints( XUserHandle user, BYTE *buffer, SIZE_T size )
         user->policies = policyCursor;
         policyCursor = user->policies + user->policiesLen;
         user->policiesLen = user->policiesLen + arraySize;
-        
+
         for (UINT32 i = 0; i < arraySize; i++) {
             if (FAILED(hr = IJsonArray_GetObjectAt(jsonPolicies, i, &tmpObject))) goto cleanup;
 
@@ -330,7 +329,7 @@ static HRESULT load_endpoints( XUserHandle user, BYTE *buffer, SIZE_T size )
         }
     }
 
-    if (FAILED(hr = IJsonArray_QueryInterface(jsonEndpoints, &IID_IVector_IJsonValue, &jsonEndpointsVector))) goto cleanup;
+    if (FAILED(hr = IJsonArray_QueryInterface(jsonEndpoints, &IID_IVector_IJsonValue, (void **)&jsonEndpointsVector))) goto cleanup;
     if (FAILED(hr = IVector_IJsonValue_get_Size(jsonEndpointsVector, &arraySize))) goto cleanup;
 
     if (!(endpointCursor = realloc(user->endpoints, sizeof(struct endpoint) * (user->endpointsLen + arraySize)))) {
@@ -342,30 +341,29 @@ static HRESULT load_endpoints( XUserHandle user, BYTE *buffer, SIZE_T size )
     user->endpointsLen = user->endpointsLen + arraySize;
     memset(endpointCursor, 0, sizeof(struct endpoint) * arraySize);
 
-    if (FAILED(hr = WindowsCreateString(L"wildcard", 8, &hostTypeWildCard))) goto cleanup;
     for (UINT32 i = 0; i < arraySize; i++) {
         if (FAILED(hr = IJsonArray_GetObjectAt(jsonEndpoints, i, &tmpObject))) goto cleanup;
 
-        if (FAILED(hr = get_json_string(tmpObject, L"Protocol", &(*endpointCursor + i).protocol))) goto cleanup;
-        if (FAILED(hr = get_json_string(tmpObject, L"Host", &(*endpointCursor + i).host) )) goto cleanup;
-        if (FAILED(get_json_string(tmpObject, L"Path", &(*endpointCursor + i).path))) (*endpointCursor + i).path = NULL;
-        
-        if (FAILED(get_json_string(tmpObject, L"RelyingParty", &(*endpointCursor + i).relyingParty))) (*endpointCursor + i).relyingParty = NULL;
-        if (FAILED(get_json_string(tmpObject, L"TokenType", &(*endpointCursor + i).tokenType))) (*endpointCursor + i).tokenType = NULL;
+        if (FAILED(hr = get_json_string(tmpObject, L"Protocol", &(endpointCursor + i)->protocol))) goto cleanup;
+        if (FAILED(hr = get_json_string(tmpObject, L"Host", &(endpointCursor + i)->host) )) goto cleanup;
+        if (FAILED(get_json_string(tmpObject, L"Path", &(endpointCursor + i)->path))) (endpointCursor + i)->path = NULL;
+
+        if (FAILED(get_json_string(tmpObject, L"RelyingParty", &(endpointCursor + i)->relyingParty))) (endpointCursor + i)->relyingParty = NULL;
+        if (FAILED(get_json_string(tmpObject, L"TokenType", &(endpointCursor + i)->tokenType))) (endpointCursor + i)->tokenType = NULL;
         if (SUCCEEDED(get_json_number(tmpObject, L"SignaturePolicyIndex", &jsonNumber)) && jsonNumber < user->policiesLen) {
-            (*endpointCursor + i).policy = policyCursor + (UINT32)jsonNumber;
+            (endpointCursor + i)->policy = policyCursor + (UINT32)jsonNumber;
         } else {
-            (*endpointCursor + i).policy = NULL;
+            (endpointCursor + i)->policy = NULL;
         }
         if (SUCCEEDED(get_json_string(tmpObject, L"HostType", &hostType))) {
             hostTypeRaw = WindowsGetStringRawBuffer(hostType, NULL);
-            (*endpointCursor + i).wildcard = wcscmp(hostTypeRaw, L"wildcard") == 0;
+            (endpointCursor + i)->wildcard = wcscmp(hostTypeRaw, L"wildcard") == 0;
             WindowsDeleteString(hostType);
             hostType = NULL;
         } else {
-            (*endpointCursor + i).wildcard = FALSE;
+            (endpointCursor + i)->wildcard = FALSE;
         }
-        
+
         IJsonObject_Release(tmpObject);
         tmpObject = NULL;
     }
