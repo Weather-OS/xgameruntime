@@ -28,6 +28,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(xgameruntime);
 char *msaAppId = NULL;
 BOOLEAN fullTrust = FALSE;
 BOOLEAN initializeCalled = FALSE;
+DWORD tlsIndex;
 
 BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, void *reserved )
 {
@@ -35,9 +36,14 @@ BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, void *reserved )
 
     switch (reason)
     {
+        case DLL_PROCESS_ATTACH:
+            if ((tlsIndex = TlsAlloc()) == TLS_OUT_OF_INDEXES) return FALSE;
+        case DLL_THREAD_ATTACH:
+            TlsSetValue( tlsIndex, FALSE );
+            break;
         case DLL_PROCESS_DETACH:
-            if (reserved) break;
             if (msaAppId) free( msaAppId );
+            TlsFree( tlsIndex );
             break;
     }
     return TRUE;
