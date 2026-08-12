@@ -47,14 +47,14 @@ static HRESULT parse_json( const char *json, SIZE_T jsonLen, IJsonObject **objec
     if (!(wJsonLen = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, json, jsonLen, NULL, 0 ))) return HRESULT_FROM_WIN32( GetLastError() );
     if (FAILED(hr = WindowsCreateStringReference( name, wcslen( name ), &header, &string ))) return hr;
     if (FAILED(hr = RoGetActivationFactory( string, &IID_IJsonValueStatics, (void **)&statics ))) return hr;
-    if (!(wJson = calloc( wJsonLen + 1, sizeof(WCHAR) )))
+    if (!(wJson = calloc( wJsonLen, sizeof(WCHAR) )))
     {
         IJsonValueStatics_Release( statics );
         return E_OUTOFMEMORY;
     }
 
-    if (!MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, json, jsonLen, wJson, wJsonLen + 1 )) goto error;
-    if (FAILED(hr = WindowsCreateStringReference( wJson, wJsonLen + 1, &header, &string ))) goto cleanup;
+    if (!MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, json, jsonLen, wJson, wJsonLen )) goto error;
+    if (FAILED(hr = WindowsCreateStringReference( wJson, wJsonLen, &header, &string ))) goto cleanup;
     if (FAILED(hr = IJsonValueStatics_Parse( statics, string, &value ))) goto cleanup;
     hr = IJsonValue_GetObject( value, object );
     IJsonValue_Release( value );
