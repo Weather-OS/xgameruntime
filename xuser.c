@@ -351,7 +351,7 @@ static HRESULT load_endpoints( XUserHandle user, BYTE *buffer, SIZE_T size )
 
         if (FAILED(get_json_string(tmpObject, L"RelyingParty", &(endpointCursor + i)->relyingParty))) (endpointCursor + i)->relyingParty = NULL;
         if (FAILED(get_json_string(tmpObject, L"TokenType", &(endpointCursor + i)->tokenType))) (endpointCursor + i)->tokenType = NULL;
-        if (SUCCEEDED(get_json_number(tmpObject, L"SignaturePolicyIndex", &jsonNumber)) && jsonNumber < user->policiesLen) {
+        if (SUCCEEDED(get_json_number(tmpObject, L"SignaturePolicyIndex", &jsonNumber)) && policyCursor && jsonNumber < (user->policiesLen - (policyCursor - user->policies))) {
             (endpointCursor + i)->policy = policyCursor + (UINT32)jsonNumber;
         } else {
             (endpointCursor + i)->policy = NULL;
@@ -383,7 +383,7 @@ cleanup:
 static HRESULT WINAPI user_Initialize( IUser *iface, const XUserAddOptions options )
 {
     static char proofKeyTemplate[] = "{\"alg\":\"ES256\",\"crv\":\"P-256\",\"kty\":\"EC\",\"use\":\"sig\",\"x\":\"";
-    static const SIZE_T proofKeySize = ARRAY_SIZE( proofKeyTemplate ) + strlen( "\",\"y\":\"\"}" ) + 86;
+    static const SIZE_T proofKeySize = ARRAY_SIZE( proofKeyTemplate ) + sizeof( "\",\"y\":\"\"}" ) + 85;
     BYTE blob[sizeof(BCRYPT_ECCKEY_BLOB) + 64], *currentBuffer = NULL, *defaultBuffer = NULL;
     char *deviceTicket = NULL, *deviceToken = NULL, *userTicket = NULL, *x, *y;
     struct XUser *impl = impl_from_IUser( iface );
@@ -430,7 +430,8 @@ static HRESULT WINAPI user_GetEndpointInfo( IUser *iface, const char *url, struc
 {
     URL_COMPONENTSW uc = { .dwStructSize = sizeof(URL_COMPONENTSW), .dwSchemeLength = -1, .dwHostNameLength = -1, .dwUrlPathLength = -1 };
     const WCHAR *host = NULL, *protocol = NULL, *path = NULL;
-    WCHAR *urlW = NULL;
+    BOOL hostMatching;
+    WCHAR *urlW = NULL, tmpChar = L'\0';
     INT32 urlWSize = 0;
     struct XUser *impl = impl_from_IUser( iface );
 
@@ -449,8 +450,16 @@ static HRESULT WINAPI user_GetEndpointInfo( IUser *iface, const char *url, struc
         protocol = WindowsGetStringRawBuffer(impl->endpoints[i].protocol, NULL);
         path = WindowsGetStringRawBuffer(impl->endpoints[i].path, NULL);
 
-        if ((impl->endpoints[i].wildcard ? SymMatchStringW( uc.lpszHostName, host, FALSE )
-             : !wcsncmp( uc.lpszHostName, host, max( uc.dwHostNameLength, wcslen( host ) ) ) ) &&
+        if (impl->endpoints[i].wildcard) {
+            tmpChar = *(uc.lpszHostName + uc.dwHostNameLength);
+            *(uc.lpszHostName + uc.dwHostNameLength) = 0;
+            hostMatching = SymMatchStringW( uc.lpszHostName, host, FALSE );
+            *(uc.lpszHostName + uc.dwHostNameLength) = tmpChar;
+        } else {
+            hostMatching = !wcsncmp( uc.lpszHostName, host, max( uc.dwHostNameLength, wcslen( host ) ) );
+        }
+
+        if (hostMatching &&
             !wcsncmp( uc.lpszScheme, protocol, max( uc.dwSchemeLength, wcslen( protocol ) ) ) &&
             (impl->endpoints[i].path ? !wcsncmp( uc.lpszUrlPath, path, max( uc.dwUrlPathLength, wcslen( path ) ) ) : 1 ))
         {
