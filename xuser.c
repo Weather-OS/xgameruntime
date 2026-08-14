@@ -426,51 +426,80 @@ cleanup:
     return hr;
 }
 
+static BOOLEAN match_wildcard( const WCHAR *pat, UINT32 patLen, const WCHAR *inp, UINT32 inpLen )
+{
+    UINT32 lastMatch = -1, lastWildcard = -1, patOff = 0, inpOff = 0;
+
+    TRACE( "pat %s, inp %s.\n", debugstr_wn( pat, patLen ), debugstr_wn( inp, inpLen ) );
+
+    while (inpOff < inpLen && patOff < patLen)
+    {
+        if (pat[patOff] == '*')
+        {
+            lastWildcard = patOff++;
+            lastMatch = inpOff;
+        }
+        else if (pat[patOff] == '?' || pat[patOff] == inp[inpOff])
+        {
+            patOff++;
+            inpOff++;
+        }
+        else if (lastWildcard != -1)
+        {
+            patOff = lastWildcard + 1;
+            inpOff = ++lastMatch;
+        }
+        else return FALSE;
+    }
+
+    return inpOff == inpLen && patOff == patLen;
+}
+
 static HRESULT WINAPI user_GetEndpointInfo( IUser *iface, const char *url, struct endpoint *info )
 {
     URL_COMPONENTSW uc = { .dwStructSize = sizeof(URL_COMPONENTSW), .dwSchemeLength = -1, .dwHostNameLength = -1, .dwUrlPathLength = -1 };
-    const WCHAR *host = NULL, *protocol = NULL, *path = NULL;
-    BOOL hostMatching;
-    WCHAR *urlW = NULL, tmpChar = L'\0';
-    INT32 urlWSize = 0;
     struct XUser *impl = impl_from_IUser( iface );
+    INT32 urlWSize;
+    WCHAR *urlW;
 
     TRACE( "iface %p, url %s, info %p.\n", iface, debugstr_a( url ), info );
 
-    if (!(urlWSize = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, url, -1, NULL, 0))) return HRESULT_FROM_WIN32( GetLastError() );
-    if (!(urlW = calloc(urlWSize, sizeof(WCHAR)))) return E_OUTOFMEMORY;
-    if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, url, -1, urlW, urlWSize)) goto error;
-
+    if (!(urlWSize = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, url, -1, NULL, 0 ))) return HRESULT_FROM_WIN32( GetLastError() );
+    if (!(urlW = calloc( urlWSize, sizeof(WCHAR) ))) return E_OUTOFMEMORY;
+    if (!MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, url, -1, urlW, urlWSize )) goto error;
     if (!InternetCrackUrlW( urlW, 0, 0, &uc )) goto error;
-    TRACE( "scheme %s, hostName %s, path %s.\n", debugstr_wn( uc.lpszScheme, uc.dwSchemeLength ), debugstr_wn( uc.lpszHostName, uc.dwHostNameLength ), debugstr_wn( uc.lpszUrlPath, uc.dwUrlPathLength ) );
 
     for (UINT32 i = 0; i < impl->endpointsLen; i++)
     {
-        host = WindowsGetStringRawBuffer(impl->endpoints[i].host, NULL);
-        protocol = WindowsGetStringRawBuffer(impl->endpoints[i].protocol, NULL);
-        path = WindowsGetStringRawBuffer(impl->endpoints[i].path, NULL);
-
-        if (impl->endpoints[i].wildcard) {
-            tmpChar = *(uc.lpszHostName + uc.dwHostNameLength);
-            *(uc.lpszHostName + uc.dwHostNameLength) = 0;
-            hostMatching = SymMatchStringW( uc.lpszHostName, host, FALSE );
-            *(uc.lpszHostName + uc.dwHostNameLength) = tmpChar;
-        } else {
-            hostMatching = !wcsncmp( uc.lpszHostName, host, max( uc.dwHostNameLength, wcslen( host ) ) );
-        }
-
-        if (hostMatching &&
-            !wcsncmp( uc.lpszScheme, protocol, max( uc.dwSchemeLength, wcslen( protocol ) ) ) &&
-            (impl->endpoints[i].path ? !wcsncmp( uc.lpszUrlPath, path, max( uc.dwUrlPathLength, wcslen( path ) ) ) : 1 ))
+        UINT32 protocolLen, hostLen, pathLen;
+        const WCHAR *protocol = WindowsGetStringRawBuffer( impl->endpoints[i].protocol, &protocolLen );
+        const WCHAR *host = WindowsGetStringRawBuffer( impl->endpoints[i].host, &hostLen );
+        const WCHAR *path = WindowsGetStringRawBuffer( impl->endpoints[i].path, &pathLen );
+        if (uc.dwSchemeLength != protocolLen || wcsncmp( uc.lpszScheme, protocol, protocolLen ))
         {
-            *info = impl->endpoints[i];
-            free(urlW);
-            return S_OK;
+            free( urlW );
+            continue;
         }
+        if (impl->endpoints[i].wildcard ? !match_wildcard( host, hostLen, uc.lpszHostName, uc.dwHostNameLength )
+                                        : (uc.dwHostNameLength != hostLen || wcsncmp( uc.lpszHostName, host, hostLen )))
+        {
+            free( urlW );
+            continue;
+        }
+        if (impl->endpoints[i].path && (uc.dwUrlPathLength != pathLen || wcsncmp( uc.lpszUrlPath, path, pathLen )))
+        {
+            free( urlW );
+            continue;
+        }
+        *info = impl->endpoints[i];
+        free( urlW );
+        return S_OK;
     }
-error:
-    if (urlW) free(urlW);
     return E_FAIL;
+
+error:
+    free(urlW);
+    return HRESULT_FROM_WIN32( GetLastError() );
 }
 
 static HRESULT WINAPI user_GetAuthorization( IUser *iface, const WCHAR *relyingParty, WCHAR **auth )
