@@ -4,31 +4,42 @@ project( xgameruntime LANGUAGES C CXX )
 
 include( ExternalProject )
 
-# ------------------------------------------------------------
-# widl (host tool)
-# ------------------------------------------------------------
+find_program(WIDL
+        NAMES
+        widl
+        x86_64-w64-mingw32-widl )
 
-set(WIDL_SOURCE_DIR
-        ${CMAKE_CURRENT_SOURCE_DIR}/tools/widl )
+if(WIDL)
+    message(STATUS "Using system widl: ${WIDL}")
+else()
+    message(STATUS "widl not found; building host widl")
 
-set(WIDL_BINARY_DIR
-        ${CMAKE_CURRENT_BINARY_DIR}/widl-host )
+    set(WIDL_SOURCE_DIR
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/widl)
 
-ExternalProject_Add(widl_host
-        SOURCE_DIR ${WIDL_SOURCE_DIR}
-        BINARY_DIR ${WIDL_BINARY_DIR}
+    set(WIDL_BINARY_DIR
+            ${CMAKE_CURRENT_BINARY_DIR}/widl-host)
 
-        CONFIGURE_COMMAND ""
+    ExternalProject_Add(widl_host
+            SOURCE_DIR ${WIDL_SOURCE_DIR}
+            BINARY_DIR ${WIDL_BINARY_DIR}
 
-        BUILD_COMMAND
-        ${CMAKE_COMMAND} -E env
-        BINDIR=${WIDL_BINARY_DIR}
-        make -C ${WIDL_SOURCE_DIR} all
+            CONFIGURE_COMMAND ""
 
-        INSTALL_COMMAND "" )
+            BUILD_COMMAND
+            ${CMAKE_COMMAND} -E env
+            BINDIR=${WIDL_BINARY_DIR}
+            make -C ${WIDL_SOURCE_DIR} all
 
-set(WIDL
-        ${WIDL_BINARY_DIR}/widl )
+            INSTALL_COMMAND ""
+    )
+
+    set(WIDL
+            ${WIDL_BINARY_DIR}/widl)
+
+    # Make targets using WIDL wait for the fallback build.
+    set(WIDL_DEPENDENCY widl_host)
+endif()
 
 
 # ------------------------------------------------------------
@@ -80,7 +91,7 @@ foreach(IDL_FILE ${IDL_FILES})
             ${IDL_FILE}
 
             DEPENDS
-            widl_host
+            ${WIDL_DEPENDENCY}
             ${IDL_FILE}
 
             VERBATIM )
@@ -99,11 +110,13 @@ add_library(xgameruntime SHARED
         src/main.cpp
         ${IDL_GENERATED_FILES} )
 
-add_dependencies(xgameruntime widl_host)
+if(WIDL_DEPENDENCY)
+    add_dependencies(xgameruntime ${WIDL_DEPENDENCY})
+endif()
 
 if(WIN32)
     set_target_properties(xgameruntime PROPERTIES
-            PREFIX "")
+            PREFIX "" )
 endif()
 
 target_include_directories(xgameruntime
