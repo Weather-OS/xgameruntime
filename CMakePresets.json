@@ -1,0 +1,15 @@
+{
+    "version": 6,
+    "configurePresets":
+    [
+        {
+          "name": "win64",
+          "generator": "Ninja",
+          "binaryDir": "${sourceDir}/build/windows-x64",
+          "toolchainFile": "${sourceDir}/win64-target.cmake",
+          "cacheVariables": {
+            "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+          }
+        }
+    ]
+}
