@@ -15,10 +15,10 @@ else()
     message(STATUS "widl not found; building host widl")
 
     set(WIDL_SOURCE_DIR
-            ${CMAKE_CURRENT_SOURCE_DIR}/tools/widl)
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/widl )
 
     set(WIDL_BINARY_DIR
-            ${CMAKE_CURRENT_BINARY_DIR}/widl-host)
+            ${CMAKE_CURRENT_BINARY_DIR}/widl-host )
 
     ExternalProject_Add(widl_host
             SOURCE_DIR ${WIDL_SOURCE_DIR}
@@ -31,11 +31,10 @@ else()
             BINDIR=${WIDL_BINARY_DIR}
             make -C ${WIDL_SOURCE_DIR} all
 
-            INSTALL_COMMAND ""
-    )
+            INSTALL_COMMAND "" )
 
     set(WIDL
-            ${WIDL_BINARY_DIR}/widl)
+            ${WIDL_BINARY_DIR}/widl )
 
     # Make targets using WIDL wait for the fallback build.
     set(WIDL_DEPENDENCY widl_host)

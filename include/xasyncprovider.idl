@@ -16,6 +16,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#pragma makedep header
+
 import "unknwn.idl";
 import "xasync.h";
 
@@ -101,11 +103,5 @@ coclass XThreadingImpl
 {
     [default] interface IXThreadingImpl;
 }
-
-// XAsyncProvider.h functions
-HRESULT __stdcall XAsyncBegin( [in, out] XAsyncBlock *asyncBlock, [in, optional] void *context, [in, optional] const void *identity, [in, optional] const char *identityName, [in] XAsyncProvider *provider );
-HRESULT __stdcall XAsyncSchedule( [in, out] XAsyncBlock *asyncBlock, [in] UINT32 delayInMs );
-void __stdcall XAsyncComplete( [in, out] XAsyncBlock *asyncBlock, [in] HRESULT result, [in] SIZE_T requiredBufferSize );
-HRESULT __stdcall XAsyncGetResult( [in, out] XAsyncBlock* asyncBlock, [in, optional] const void* identity, [in] SIZE_T bufferSize, [out, size_is(bufferSize)] void* buffer, [out, optional] SIZE_T* bufferUsed );
 
 cpp_quote("#endif")
