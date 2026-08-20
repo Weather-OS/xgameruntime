@@ -30,13 +30,15 @@ typedef struct XAsyncBlock XAsyncBlock;
 typedef void    __stdcall XAsyncCompletionRoutine( XAsyncBlock *asyncBlock );
 typedef HRESULT __stdcall XAsyncWork( XAsyncBlock *asyncBlock );
 
+#ifndef __WIDL__
 struct XAsyncBlock
 {
     XTaskQueueHandle queue;
     void *context;
     XAsyncCompletionRoutine *callback;
-    void *internal[4];
+    unsigned internal[sizeof(void*) * 4];
 };
+#endif
 
 HRESULT __stdcall XAsyncGetStatus( XAsyncBlock *asyncBlock, BOOLEAN wait );
 HRESULT __stdcall XAsyncGetResultSize( XAsyncBlock *asyncBlock, SIZE_T *bufferSize );
