@@ -18,11 +18,26 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#include <private/logging.h>
 #include <windows.h>
-#include <xasyncprovider.h>
 
-int DllMain()
+BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, void *reserved )
 {
-    IXThreadingImpl *a = nullptr;
-    return 1;
+    TRACE("inst %p, reason %lu, reserved %p.\n", hinst, reason, reserved);
+
+    switch (reason)
+    {
+        case DLL_PROCESS_ATTACH:
+        {
+            DisableThreadLibraryCalls(hinst);
+            FIXME("xgameruntime not implemented!");
+            Sleep(10000);
+            break;
+        }
+        case DLL_PROCESS_DETACH:
+            if (reserved) break;
+            break;
+    }
+
+    return TRUE;
 }
