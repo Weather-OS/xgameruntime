@@ -75,20 +75,7 @@ endforeach()
 # xgameruntime
 # ------------------------------------------------------------
 
-add_library(xgameruntime SHARED
-        src/main.cpp
-        ${IDL_GENERATED_FILES} )
+include_directories( ${PROJECT_SOURCE_DIR}/include )
 
-if(WIN32)
-    set_target_properties(xgameruntime PROPERTIES
-            PREFIX "" )
-endif()
-
-target_include_directories(xgameruntime
-        PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${IDL_BINARY_DIR} )
-
-target_compile_features(xgameruntime
-        PUBLIC
-        cxx_std_23 )
+add_subdirectory( libs )
+add_subdirectory( src )
