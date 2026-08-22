@@ -7,6 +7,9 @@ if(WIN32)
             PREFIX "" )
 endif()
 
+set_target_properties(xgameruntime PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" )
+
 target_link_libraries( xgameruntime PRIVATE
         xgameruntime-common )
 
