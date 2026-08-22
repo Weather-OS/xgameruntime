@@ -87,7 +87,7 @@ VOID XGameRuntime_DEBUG( IN Log_Category category, IN pid_t threadId, IN LPCSTR 
 #define WARN(message, ...) \
     XGameRuntime_DEBUG( LOG_CATEGORY_WARNING, gettid(), __FILENAME__, __FUNCTION__, message, ##__VA_ARGS__)
 
-#define ERROR(message, ...) \
+#define ERR(message, ...) \
     XGameRuntime_DEBUG( LOG_CATEGORY_ERROR, gettid(), __FILENAME__, __FUNCTION__, message, ##__VA_ARGS__)
 
 #define FIXME(message, ...) \
@@ -127,12 +127,12 @@ struct Exception final : std::runtime_error
 
     explicit Exception( HRESULT s ): std::runtime_error( "Unhandled Exception: " + std::to_string(s) ), status(s)
     {
-        ERROR( "Exception %d within C++ code.\n", status );
+        ERR( "Exception %d within C++ code.\n", status );
     }
 
     explicit Exception( HRESULT s, const std::string &message ): std::runtime_error( "Unhandled Exception: " + std::to_string(s) + " with message " + message ), status(s), msg(message)
     {
-        ERROR( "Exception %d within C++ code with message %s.\n", status, message.c_str() );
+        ERR( "Exception %d within C++ code with message %s.\n", status, message.c_str() );
     }
 };
 
