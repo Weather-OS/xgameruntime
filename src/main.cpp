@@ -21,6 +21,10 @@
 #include <private/logging.h>
 #include <windows.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, void *reserved )
 {
     TRACE("inst %p, reason %lu, reserved %p.\n", hinst, reason, reserved);
@@ -35,9 +39,50 @@ BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, void *reserved )
             break;
         }
         case DLL_PROCESS_DETACH:
+        {
             if (reserved) break;
             break;
+        }
     }
 
     return TRUE;
 }
+
+HRESULT WINAPI InitializeApiImplEx2( ULONG gdkVer, ULONG gsVer, char mode, const struct initialize_options *options )
+{
+    TRACE( "gdkVer %ld, gsVer %ld, mode %d, options %p.\n", gdkVer, gsVer, mode, options );
+    return S_OK;
+}
+
+HRESULT WINAPI InitializeApiImplEx( ULONG gdkVer, ULONG gsVer, char mode )
+{
+    return InitializeApiImplEx2( gdkVer, gsVer, mode, NULL );
+}
+
+HRESULT WINAPI InitializeApiImpl( ULONG gdkVer, ULONG gsVer )
+{
+    return InitializeApiImplEx2( gdkVer, gsVer, 0, NULL );
+}
+
+HRESULT WINAPI QueryApiImpl( REFCLSID clsid, REFIID iid, void **out )
+{
+    TRACE( "clsid %s, iid %s, out %p.\n", debugstr_guid( &clsid ), debugstr_guid( &iid ), out );
+
+    return HRESULT_FROM_WIN32( ERROR_NOT_SUPPORTED );
+}
+
+HRESULT WINAPI UninitializeApiImpl()
+{
+    TRACE("stub!\n");
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI XErrorReport( HRESULT status, LPCSTR message )
+{
+    TRACE("stub!\n");
+    return E_NOTIMPL;
+}
+
+#ifdef __cplusplus
+}
+#endif
