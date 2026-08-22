@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#include <initguid.h>
 #include "private.h"
 
 #ifdef __cplusplus
@@ -71,8 +72,38 @@ HRESULT WINAPI InitializeApiImpl( ULONG gdkVer, ULONG gsVer )
 
 HRESULT WINAPI QueryApiImpl( REFCLSID clsid, REFIID iid, void **out )
 {
+    // ------------ FOR FUTURE REFERENCES ------------
+    //
+    // Interfaces returned are COM interfaces and inherit IUnknown*
+    //
+    //  On MSDN, There's no official documentation on the order of these interfaces and functions.
+    // However, we can hook a dummy `xgameruntime.dll` into test environments and individually query
+    // each class and what signatures they posses. Once we've pass through an empty IUnknown* interface,
+    // we can reconstruct the vtable of each class based on what function gets called.
+    //
+    //  Example: (e349bd1a-fc20-4e40-b99c-4178cc6b409f) corresponds to part of the `ISystem` class and implements
+    // these functions in order:
+    //
+    //  /*** IUnknown methods ***/
+    //  IXSystemImpl_QueryInterface,                    (offset 0)
+    //  IXSystemImpl_AddRef,                            (offset 8)
+    //  IXSystemImpl_Release,                           (offset 16)
+    //  /*** IXSystemImpl methods ***/
+    //  IXSystemImpl_XSystemGetConsoleId                (offset 24)
+    //  IXSystemImpl_XSystemGetXboxLiveSandboxId        (offset 32)
+    //  IXSystemImpl_XSystemGetAppSpecificDeviceId      (offset 40)
+    //  IXSystemImpl_XSystemHandleTrack                 (offset 48)
+    //  IXSystemImpl_XSystemIsHandleValid               (offset 56)
+    //  IXSystemImpl_XSystemAllowFullDownloadBandwidth  (offset 64)
+    //
     TRACE( "clsid %s, iid %s, out %p.\n", debugstr_guid( &clsid ), debugstr_guid( &iid ), out );
 
+    if ( IsEqualGUID( clsid, CLSID_XThreadingImpl ) )
+    {
+        return x_threading_impl->QueryInterface( iid, out );
+    }
+
+    FIXME( "%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid( &clsid ) );
     return HRESULT_FROM_WIN32( ERROR_NOT_SUPPORTED );
 }
 
