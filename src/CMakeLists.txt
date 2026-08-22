@@ -1,5 +1,6 @@
 add_library(xgameruntime SHARED
         main.cpp
+        xgameruntime.def
         ${IDL_GENERATED_FILES} )
 
 if(WIN32)
