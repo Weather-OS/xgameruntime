@@ -27,7 +27,7 @@ class XThreadingImpl :
     public IXThreadingImpl
 {
 public:
-    HRESULT WINAPI QueryInterface( REFIID iid, void **out )
+    HRESULT WINAPI QueryInterface( REFIID iid, void **out ) noexcept override
     {
         TRACE( "iface %p, iid %s, out %p.\n", this, debugstr_guid( &iid ), out );
 
