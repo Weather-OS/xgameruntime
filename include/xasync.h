@@ -36,7 +36,7 @@ struct XAsyncBlock
     XTaskQueueHandle queue;
     void *context;
     XAsyncCompletionRoutine *callback;
-    unsigned internal[sizeof(void*) * 4];
+    unsigned char internal[sizeof(void*) * 4];
 };
 #endif
 

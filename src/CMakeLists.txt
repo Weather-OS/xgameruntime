@@ -48,6 +48,17 @@ add_library(xgameruntime SHARED
         xgameruntime.def
         ${IDL_GENERATED_FILES} )
 
+# System
+target_sources( xgameruntime PRIVATE
+        System/XThreading.cpp )
+
+# System/Threading (based on libHttpClient)
+target_sources( xgameruntime PRIVATE
+        System/Threading/ThreadPool.cpp
+        System/Threading/WaitTimer.cpp
+        System/Threading/XAsync.cpp
+        System/Threading/XTaskQueue.cpp )
+
 if(WIN32)
     set_target_properties(xgameruntime PROPERTIES
             PREFIX "" )

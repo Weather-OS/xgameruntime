@@ -18,9 +18,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <xuser.h>
-#include <private/logging.h>
-#include <windows.h>
+#include "private.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,7 +41,6 @@ BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, void *reserved )
         case DLL_PROCESS_ATTACH:
         {
             DisableThreadLibraryCalls(hinst);
-            FIXME("xgameruntime not implemented!");
             break;
         }
         case DLL_PROCESS_DETACH:
