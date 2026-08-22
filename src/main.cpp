@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#include <xuser.h>
 #include <private/logging.h>
 #include <windows.h>
 
@@ -25,8 +26,16 @@
 extern "C" {
 #endif
 
+static volatile LONG loggerInitialized = FALSE;
+
 BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, void *reserved )
 {
+    if ( !loggerInitialized )
+    {
+        InitializeLogging();
+        loggerInitialized = TRUE;
+    }
+
     TRACE("inst %p, reason %lu, reserved %p.\n", hinst, reason, reserved);
 
     switch (reason)
@@ -35,7 +44,6 @@ BOOL WINAPI DllMain( HINSTANCE hinst, DWORD reason, void *reserved )
         {
             DisableThreadLibraryCalls(hinst);
             FIXME("xgameruntime not implemented!");
-            Sleep(10000);
             break;
         }
         case DLL_PROCESS_DETACH:
