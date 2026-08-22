@@ -24,6 +24,9 @@
 #define XGAMERUNTIME_LOGGING_H
 
 #include <unistd.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <assert.h>
 #include <string.h>
 
 #ifdef __cplusplus
@@ -100,6 +103,16 @@ VOID XGameRuntime_DEBUG( IN Log_Category category, IN pid_t threadId, IN LPCSTR 
         ERROR("A critical null pointer exception occured!\n");  \
         exit(125);                                              \
     }                                                           \
+
+static inline LPCSTR debugstr_guid( const GUID *id )
+{
+    static thread_local CHAR str[39];
+    sprintf( str, "{%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}",
+                             (unsigned int)id->Data1, id->Data2, id->Data3,
+                             id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
+                             id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7] );
+    return str;
+}
 
 #ifdef __cplusplus
 } // extern "C"
