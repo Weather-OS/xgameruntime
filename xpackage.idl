@@ -187,15 +187,15 @@ interface IXPackageImpl : IUnknown
     HRESULT __PADDING__();
     HRESULT __PADDING_2__();
     BOOLEAN XPackageUnregisterPackageInstalled( [in] XTaskQueueRegistrationToken token, [in] BOOLEAN wait );
-    HRESULT __PADDING_3__();
+    HRESULT XPackageMount( [in, string] const char *packageIdentifier, [out] XPackageMountHandle *mount );
     HRESULT XPackageGetMountPathSize( [in] XPackageMountHandle mount, [out] SIZE_T *pathSize );
     HRESULT XPackageGetMountPath( [in] XPackageMountHandle mount, [in] SIZE_T pathSize, [out, size_is(pathSize)] char *path );
     void    XPackageCloseMountHandle( [in] XPackageMountHandle mount );
-    HRESULT __PADDING_4__();
+    HRESULT __PADDING_3__();
     HRESULT XPackageEnumeratePackages( [in] XPackageKind kind, [in] XPackageEnumerationScope scope, [in, optional] void *context, [in] XPackageEnumerationCallback *callback );
     HRESULT XPackageRegisterPackageInstalled( [in] XTaskQueueHandle queue, [in, optional] void *context, [in] XPackageInstalledCallback *callback, [out] XTaskQueueRegistrationToken *token );
     HRESULT XPackageGetWriteStats( [out] XPackageWriteStats *writeStats );
-    HRESULT __PADDING_5__();
+    HRESULT __PADDING_4__();
     HRESULT XPackageUninstallUWPInstance( [in, string] const char *packageName );
     HRESULT XPackageEnumerateFeatures( [in, string] const char *packageIdentifier, [in, optional] void *context, [in] XPackageFeatureEnumerationCallback *callback );
     BOOLEAN XPackageUninstallPackage( [in, string] const char *packageIdentifier );

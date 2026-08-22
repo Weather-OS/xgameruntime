@@ -189,9 +189,9 @@ static BOOLEAN WINAPI x_package_XPackageUnregisterPackageInstalled( IXPackageImp
     return TRUE;
 }
 
-static HRESULT WINAPI __PADDING_3__( IXPackageImpl4 *iface )
+static HRESULT WINAPI x_package_XPackageMount( IXPackageImpl4 *iface, const char *packageIdentifier, XPackageMountHandle *mount )
 {
-    WARN( "iface %p padding function called! It's unknown what this function does.\n", iface );
+    FIXME( "iface %p, packageIdentifier %s, mount %p stub!\n", iface, debugstr_a( packageIdentifier ), mount );
     return E_NOTIMPL;
 }
 
@@ -212,7 +212,7 @@ static void WINAPI x_package_XPackageCloseMountHandle( IXPackageImpl4 *iface, XP
     FIXME( "iface %p, mount %p stub!\n", iface, mount );
 }
 
-static HRESULT WINAPI __PADDING_4__( IXPackageImpl4 *iface )
+static HRESULT WINAPI __PADDING_3__( IXPackageImpl4 *iface )
 {
     WARN( "iface %p padding function called! It's unknown what this function does.\n", iface );
     return E_NOTIMPL;
@@ -236,7 +236,7 @@ static HRESULT WINAPI x_package_XPackageGetWriteStats( IXPackageImpl4 *iface, XP
     return E_NOTIMPL;
 }
 
-static HRESULT WINAPI __PADDING_5__( IXPackageImpl4 *iface )
+static HRESULT WINAPI __PADDING_4__( IXPackageImpl4 *iface )
 {
     WARN( "iface %p padding function called! It's unknown what this function does.\n", iface );
     return E_NOTIMPL;
@@ -328,15 +328,15 @@ static const struct IXPackageImpl4Vtbl x_package_vtbl =
     __PADDING__,
     __PADDING_2__,
     x_package_XPackageUnregisterPackageInstalled,
-    __PADDING_3__,
+    x_package_XPackageMount,
     x_package_XPackageGetMountPathSize,
     x_package_XPackageGetMountPath,
     x_package_XPackageCloseMountHandle,
-    __PADDING_4__,
+    __PADDING_3__,
     x_package_XPackageEnumeratePackages,
     x_package_XPackageRegisterPackageInstalled,
     x_package_XPackageGetWriteStats,
-    __PADDING_5__,
+    __PADDING_4__,
     x_package_XPackageUninstallUWPInstance,
     x_package_XPackageEnumerateFeatures,
     x_package_XPackageUninstallPackage,
