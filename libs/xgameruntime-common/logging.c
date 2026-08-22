@@ -37,8 +37,8 @@ static LPCSTR debugLevels[] =
     "trace",
 };
 
-static Log_Category logLevel;
-static HANDLE *logFile;
+static Log_Category logLevel = LOG_CATEGORY_FIXME;
+static HANDLE logFile = INVALID_HANDLE_VALUE;
 static CRITICAL_SECTION cs;
 
 static HRESULT
