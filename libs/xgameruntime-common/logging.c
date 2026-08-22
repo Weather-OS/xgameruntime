@@ -37,7 +37,7 @@ static LPCSTR debugLevels[] =
     "trace",
 };
 
-static Log_Category debugLevel;
+static Log_Category logLevel;
 static HANDLE *logFile;
 
 static HRESULT
@@ -283,36 +283,13 @@ XGameRuntime_DEBUG(
     va_list ap = {};
     va_list ap_copy = {};
 
-    CHAR env_buffer[MAX_ENV_BUFFER];
-    DWORD bytesWritten = 0;
     LPSTR parsedMessage;
     LPSTR buffer;
     SIZE_T bufferSize;
     UINT32 iter;
-    HANDLE log_file = NULL;
-    Log_Category logLevel = DEFAULT_LOG_LEVEL;
-
-    if ( SUCCEEDED( xgameruntime_get_env( "XGAMERUNTIME_LOG_LEVEL", env_buffer, sizeof( env_buffer ) ) ) )
-    {
-        for ( iter = 0; iter < sizeof(LogCategoryNames) / sizeof(LPCSTR); ++iter )
-            if ( !strcmp( LogCategoryNames[ iter ], env_buffer ) )
-                logLevel = (Log_Category)iter;
-    }
-
-    RtlZeroMemory( env_buffer, sizeof( env_buffer ) );
 
     if ( logLevel < category )
         return;
-
-    if ( SUCCEEDED( xgameruntime_get_env( "XGAMERUNTIME_LOG_FILE", env_buffer, sizeof( env_buffer ) ) ) )
-    {
-        log_file = CreateFileA( env_buffer, FILE_APPEND_DATA, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
-    }
-
-    if ( log_file == INVALID_HANDLE_VALUE || log_file == NULL )
-    {
-        log_file = GetStdHandle( STD_OUTPUT_HANDLE );
-    }
 
     va_start( ap, fmt );
     va_copy( ap_copy, ap );
@@ -323,7 +300,6 @@ XGameRuntime_DEBUG(
     if ( !buffer )
     {
         va_end( ap );
-        CloseHandle( log_file );
         return;
     }
 
@@ -331,9 +307,34 @@ XGameRuntime_DEBUG(
     va_end( ap );
 
     ParseMessage( LOG_FORMAT, category, threadId, module, function, buffer, &parsedMessage );
-    WriteFile( log_file, parsedMessage, (DWORD)lstrlenA( parsedMessage ), NULL, NULL );
+    WriteFile( logFile, parsedMessage, (DWORD)lstrlenA( parsedMessage ), NULL, NULL );
 
-    CloseHandle( log_file );
     CoTaskMemFree( parsedMessage );
     CoTaskMemFree( buffer );
+}
+
+VOID
+InitializeLogging()
+{
+    CHAR env_buffer[MAX_ENV_BUFFER];
+    UINT32 iter;
+
+    if ( SUCCEEDED( xgameruntime_get_env( "XGAMERUNTIME_LOG_LEVEL", env_buffer, sizeof( env_buffer ) ) ) )
+    {
+        for ( iter = 0; iter < sizeof(LogCategoryNames) / sizeof(LPCSTR); ++iter )
+            if ( !strcmp( LogCategoryNames[ iter ], env_buffer ) )
+                logLevel = (Log_Category)iter;
+    }
+
+    RtlZeroMemory( env_buffer, sizeof( env_buffer ) );
+
+    if ( SUCCEEDED( xgameruntime_get_env( "XGAMERUNTIME_LOG_FILE", env_buffer, sizeof( env_buffer ) ) ) )
+    {
+        logFile = CreateFileA( env_buffer, FILE_APPEND_DATA, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
+    }
+
+    if ( logFile == INVALID_HANDLE_VALUE || logFile == NULL )
+    {
+        logFile = GetStdHandle( STD_OUTPUT_HANDLE );
+    }
 }

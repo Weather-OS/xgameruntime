@@ -69,9 +69,9 @@ typedef struct _Log_Token
     Log_Category Category;
 } Log_Token;
 
-HRESULT InitializeLogging();
+VOID InitializeLogging();
 
-void XGameRuntime_DEBUG( IN Log_Category category, IN pid_t threadId, IN LPCSTR module, IN LPCSTR function, IN LPCSTR fmt, ... );
+VOID XGameRuntime_DEBUG( IN Log_Category category, IN pid_t threadId, IN LPCSTR module, IN LPCSTR function, IN LPCSTR fmt, ... );
 
 #define __FILENAME__ \
     (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : \
@@ -100,8 +100,6 @@ void XGameRuntime_DEBUG( IN Log_Category category, IN pid_t threadId, IN LPCSTR 
         ERROR("A critical null pointer exception occured!\n");  \
         exit(125);                                              \
     }                                                           \
-
-LPCSTR debugstr_uuid( IN REFIID uuid );
 
 #ifdef __cplusplus
 } // extern "C"
