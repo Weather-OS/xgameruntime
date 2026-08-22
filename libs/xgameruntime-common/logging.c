@@ -39,6 +39,7 @@ static LPCSTR debugLevels[] =
 
 static Log_Category logLevel;
 static HANDLE *logFile;
+static CRITICAL_SECTION cs;
 
 static HRESULT
 ParseMessage(
@@ -307,7 +308,10 @@ XGameRuntime_DEBUG(
     va_end( ap );
 
     ParseMessage( LOG_FORMAT, category, threadId, module, function, buffer, &parsedMessage );
+
+    EnterCriticalSection( &cs );
     WriteFile( logFile, parsedMessage, (DWORD)lstrlenA( parsedMessage ), NULL, NULL );
+    LeaveCriticalSection( &cs );
 
     CoTaskMemFree( parsedMessage );
     CoTaskMemFree( buffer );
@@ -318,6 +322,8 @@ InitializeLogging()
 {
     CHAR env_buffer[MAX_ENV_BUFFER];
     UINT32 iter;
+
+    InitializeCriticalSection( &cs );
 
     if ( SUCCEEDED( xgameruntime_get_env( "XGAMERUNTIME_LOG_LEVEL", env_buffer, sizeof( env_buffer ) ) ) )
     {
