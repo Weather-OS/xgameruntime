@@ -59,6 +59,11 @@ set_target_properties(xgameruntime PROPERTIES
 target_link_libraries( xgameruntime PRIVATE
         xgameruntime-common )
 
+target_link_options(xgameruntime PRIVATE
+        -static
+        -static-libgcc
+        -static-libstdc++ )
+
 target_include_directories(xgameruntime
         PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
