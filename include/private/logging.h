@@ -61,7 +61,7 @@ static LPCSTR LogCategoryNames[] =
     /* LOG_CATEGORY_TRACE   */ "trace",
 };
 
-#define DEFAULT_LOG_CATEGORY LOG_CATEGORY_FIXME
+#define DEFAULT_LOG_LEVEL LOG_CATEGORY_FIXME
 
 typedef struct _Log_Token
 {

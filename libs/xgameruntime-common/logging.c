@@ -290,7 +290,7 @@ XGameRuntime_DEBUG(
     SIZE_T bufferSize;
     UINT32 iter;
     HANDLE log_file = NULL;
-    Log_Category logLevel = DEFAULT_LOG_CATEGORY;
+    Log_Category logLevel = DEFAULT_LOG_LEVEL;
 
     if ( SUCCEEDED( xgameruntime_get_env( "XGAMERUNTIME_LOG_LEVEL", env_buffer, sizeof( env_buffer ) ) ) )
     {
@@ -323,6 +323,7 @@ XGameRuntime_DEBUG(
     if ( !buffer )
     {
         va_end( ap );
+        CloseHandle( log_file );
         return;
     }
 
@@ -332,6 +333,7 @@ XGameRuntime_DEBUG(
     ParseMessage( LOG_FORMAT, category, threadId, module, function, buffer, &parsedMessage );
     WriteFile( log_file, parsedMessage, (DWORD)lstrlenA( parsedMessage ), NULL, NULL );
 
+    CloseHandle( log_file );
     CoTaskMemFree( parsedMessage );
     CoTaskMemFree( buffer );
 }
