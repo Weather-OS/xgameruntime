@@ -9,12 +9,23 @@ file(GLOB_RECURSE IDL_FILES
 set(IDL_GENERATED_FILES)
 
 foreach(IDL_FILE ${IDL_FILES})
+    file(RELATIVE_PATH IDL_RELATIVE_PATH
+            ${IDL_SOURCE_DIR}
+            ${IDL_FILE} )
+
+    get_filename_component(IDL_RELATIVE_DIR
+            ${IDL_RELATIVE_PATH}
+            DIRECTORY )
+
     get_filename_component(IDL_NAME
-            ${IDL_FILE}
+            ${IDL_RELATIVE_PATH}
             NAME_WE )
 
+    set(GENERATED_DIR
+            ${IDL_BINARY_DIR}/${IDL_RELATIVE_DIR} )
+
     set(GENERATED_H
-            ${IDL_BINARY_DIR}/${IDL_NAME}.h )
+            ${GENERATED_DIR}/${IDL_NAME}.h )
 
     add_custom_command(
             OUTPUT
@@ -22,7 +33,7 @@ foreach(IDL_FILE ${IDL_FILES})
 
             COMMAND
             ${CMAKE_COMMAND} -E make_directory
-            ${IDL_BINARY_DIR}
+            ${GENERATED_DIR}
 
             COMMAND
             ${WIDL}
@@ -36,7 +47,7 @@ foreach(IDL_FILE ${IDL_FILES})
             VERBATIM )
 
     list(APPEND IDL_GENERATED_FILES
-            ${GENERATED_H} )
+            ${GENERATED_H})
 endforeach()
 
 # ------------------------------------------------------------
