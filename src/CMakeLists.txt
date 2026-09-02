@@ -1,56 +1,4 @@
 # ------------------------------------------------------------
-# IDL generation
-# ------------------------------------------------------------
-
-file(GLOB_RECURSE IDL_FILES
-        CONFIGURE_DEPENDS
-        ${IDL_SOURCE_DIR}/*.idl )
-
-set(IDL_GENERATED_FILES)
-
-foreach(IDL_FILE ${IDL_FILES})
-    file(RELATIVE_PATH IDL_RELATIVE_PATH
-            ${IDL_SOURCE_DIR}
-            ${IDL_FILE} )
-
-    get_filename_component(IDL_RELATIVE_DIR
-            ${IDL_RELATIVE_PATH}
-            DIRECTORY )
-
-    get_filename_component(IDL_NAME
-            ${IDL_RELATIVE_PATH}
-            NAME_WE )
-
-    set(GENERATED_DIR
-            ${IDL_BINARY_DIR}/${IDL_RELATIVE_DIR} )
-
-    set(GENERATED_H
-            ${GENERATED_DIR}/${IDL_NAME}.h )
-
-    add_custom_command(
-            OUTPUT
-            ${GENERATED_H}
-
-            COMMAND
-            ${CMAKE_COMMAND} -E make_directory
-            ${GENERATED_DIR}
-
-            COMMAND
-            ${WIDL}
-            -h
-            -o ${GENERATED_H}
-            ${IDL_FILE}
-
-            DEPENDS
-            ${IDL_FILE}
-
-            VERBATIM )
-
-    list(APPEND IDL_GENERATED_FILES
-            ${GENERATED_H})
-endforeach()
-
-# ------------------------------------------------------------
 # xgameruntime
 # ------------------------------------------------------------
 
@@ -58,6 +6,9 @@ add_library(xgameruntime SHARED
         main.cpp
         xgameruntime.def
         ${IDL_GENERATED_FILES} )
+
+add_dependencies(xgameruntime
+        xgameruntime-idl )
 
 # System
 target_sources( xgameruntime PRIVATE
