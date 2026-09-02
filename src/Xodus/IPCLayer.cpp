@@ -30,7 +30,6 @@
 
 #include <ntstatus.h>
 #include <winstring.h>
-#include <afunix.h>
 #include <atomic>
 
 using namespace ABI;
@@ -225,154 +224,6 @@ private:
         SIZE_T curr_buffer_size;
     } POLL_SOCKET_ARGS;
 
-    // Native IPC Socket Implementation
-    static NTSTATUS
-    ConnectSocket( LPCSTR socket_suffix )
-    {
-        WSADATA wsa;
-        struct sockaddr_un addr{};
-        LPSTR normalized;
-        CHAR runtime[MAX_ENV_BUFFER];
-
-        TRACE( "socket_suffix %s\n", socket_suffix );
-
-        switch ( xgameruntime_get_os() )
-        {
-            case RunningOS::OS_Linux:
-                if ( FAILED( xgameruntime_get_env( "XDG_RUNTIME_DIR", runtime, sizeof( runtime ) ) ) )
-                    throw new Exception( E_NOT_VALID_STATE, "Detected running under Wine on Linux, but XDG_RUNTIME_DIR was not defined!" );
-                normalized = NormalizeUnixPathToWine( runtime );
-                lstrcpyA( runtime, normalized );
-                CoTaskMemFree( normalized );
-                break;
-
-            case RunningOS::OS_Windows:
-                throw new Exception( E_NOTIMPL, "Windows support is not implemented!" );
-                break;
-
-            case RunningOS::OS_Darwin:
-                lstrcpyA( runtime, "/tmp" );
-                normalized = NormalizeUnixPathToWine( runtime );
-                lstrcpyA( runtime, normalized );
-                CoTaskMemFree( normalized );
-                break;
-
-            case RunningOS::OS_Other:
-                throw new Exception( E_NOTIMPL, "OS or compatibility layer is not supported!" );
-        }
-
-        WSAStartup( MAKEWORD( 2, 2 ), &wsa );
-
-        size_t len = strlen( runtime ) + strlen( socket_suffix ) + 1;
-        LPSTR socket_path = (LPSTR)malloc( len );
-
-        if ( !socket_path )
-            return STATUS_NO_MEMORY;
-
-        snprintf( socket_path, len + 1, "%s\\%s", runtime, socket_suffix );
-
-        sockfd = socket( AF_UNIX, SOCK_STREAM, 0 );
-        if ( sockfd == INVALID_SOCKET )
-            return STATUS_ABANDONED;
-
-        memset( &addr, 0, sizeof(addr) );
-        addr.sun_family = AF_UNIX;
-        lstrcpynA( addr.sun_path, socket_path, sizeof(addr.sun_path) - 1 );
-
-        if ( connect( sockfd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr) ) < 0 )
-        {
-            TRACE( "failed to load socket %s\n", socket_path );
-            TRACE( "socket connection failed with %d\n", errno );
-            return STATUS_CONNECTION_REFUSED;
-        }
-
-        return STATUS_SUCCESS;
-    }
-
-    static NTSTATUS
-    PollSocket( POLL_SOCKET_ARGS *socket_args )
-    {
-        struct pollfd fds[1];
-        int ret;
-        ssize_t n;
-
-        TRACE( "socket_args %p\n", socket_args );
-
-        if ( !sockfd )
-            return STATUS_CONNECTION_INVALID;
-
-        fds[0].fd = sockfd;
-        fds[0].events = POLLRDNORM;
-
-        do {
-            ret = WSAPoll( fds, 1, -1 );
-        } while ( ret == SOCKET_ERROR && WSAGetLastError() == WSAEINTR );
-
-        if ( ret == SOCKET_ERROR )
-            return STATUS_CONNECTION_DISCONNECTED;
-
-        if ( fds[0].revents & (POLLERR | POLLHUP | POLLNVAL) )
-            return STATUS_CONNECTION_DISCONNECTED;
-
-        if ( fds[0].revents & POLLRDNORM )
-        {
-            n = recv( sockfd, reinterpret_cast<char *>(socket_args->curr_buffer + socket_args->curr_buffer_size), static_cast<int>(POLL_BUFFER_SIZE - socket_args->curr_buffer_size), 0 );
-
-            if ( n == 0 )
-                return STATUS_CONNECTION_DISCONNECTED;
-
-            if ( n == SOCKET_ERROR )
-                return STATUS_CONNECTION_DISCONNECTED;
-
-            socket_args->curr_buffer_size += n;
-        }
-
-        return STATUS_SUCCESS;
-    }
-
-    static NTSTATUS
-    SendFrame( IPCFrame *frame )
-    {
-        SIZE_T sent = 0;
-        SIZE_T n;
-        SIZE_T remaining;
-
-        TRACE( "frame %p\n", frame );
-
-        UINT32 magic = *reinterpret_cast<UINT32 *>(frame->frame);
-        UINT16 type  = *reinterpret_cast<UINT16 *>(frame->frame + sizeof(UINT32));
-        UINT16 len   = *reinterpret_cast<UINT16 *>(frame->frame + sizeof(UINT32) + sizeof(UINT16));
-        BYTE* body  = frame->frame + 8;
-
-        TRACE("magic is %#x\n", magic);
-        TRACE("type is %d\n", type);
-        TRACE("len is %d\n", len);
-        TRACE("body is %s\n", body);
-
-        while ( sent < frame->frameSize )
-        {
-            remaining = static_cast<int>(frame->frameSize - sent);
-            n = send( sockfd, reinterpret_cast<const char *>(frame->frame) + sent, remaining, 0 );
-
-            if ( n == SOCKET_ERROR )
-            {
-                int error = WSAGetLastError();
-
-                if (error == WSAEINTR)
-                    continue;
-
-                return STATUS_CONNECTION_RESET;
-            }
-
-            if ( n == 0 )
-                return STATUS_CONNECTION_RESET;
-
-            sent += n;
-        }
-
-        return STATUS_SUCCESS;
-    }
-
     static HRESULT WINAPI
     SendRequest( IUnknown *invoker, PVOID param, PROPVARIANT *result )
     {
@@ -424,7 +275,7 @@ private:
         status = iface->add_ResponseReceived( handler, &token );
         if ( FAILED( status ) ) return status;
 
-        nts = SendFrame( &frame );
+        //nts = SendFrame( &frame );
         CoTaskMemFree( frame.frame );
         if ( FAILED( nts ) ) return HRESULT_FROM_NT( nts );
 
@@ -494,19 +345,14 @@ private:
         WindowsDeleteString( bufferClass );
         if ( FAILED( hstatus ) ) return hstatus;
 
-        status = ConnectSocket( XODUS_SOCKET_SUFFIX );
-        if ( FAILED( status ) )
-        {
-            MessageBoxA( nullptr, "Xodus Socket is not available! Xbox functionality will be missing.", "Warning", MB_ICONWARNING );
-            throw Exception( HRESULT_FROM_NT( status ), "Xodus Socket is not available! Xbox functionality will be missing" );
-        }
+        //status = ConnectSocket( XODUS_SOCKET_SUFFIX );
+        if ( FAILED( status ) ) return HRESULT_FROM_NT( status );
 
         // Automatically broken when the DLL is detatched.
         while ( TRUE )
         {
-            status = PollSocket( &currentPoll );
-            if ( FAILED( status ) )
-                break;
+            //status = PollSocket( &currentPoll );
+            if ( FAILED( status ) ) return HRESULT_FROM_NT( status );
 
             // Multiple messages may arrive at the same time.
             // Try to parse them all

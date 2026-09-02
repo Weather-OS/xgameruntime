@@ -18,11 +18,11 @@ target_sources(xgameruntime PRIVATE
         Xodus/XodusXMLBuilder.cpp )
 
 # System
-target_sources(xgameruntime PRIVATE
+target_sources( xgameruntime PRIVATE
         System/XThreading.cpp )
 
 # System/Threading (based on libHttpClient)
-target_sources(xgameruntime PRIVATE
+target_sources( xgameruntime PRIVATE
         System/Threading/ThreadPool.cpp
         System/Threading/WaitTimer.cpp
         System/Threading/XAsync.cpp
@@ -34,13 +34,12 @@ if(WIN32)
 endif()
 
 set_target_properties(xgameruntime PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" )
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" )
 
-target_link_libraries(xgameruntime PRIVATE
+target_link_libraries( xgameruntime PRIVATE
         xgameruntime-common
         winrt
-        ws2_32
-        LibXml2 )
+        ws2_32 )
 
 target_link_options(xgameruntime PRIVATE
         -static
