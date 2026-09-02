@@ -1,6 +1,7 @@
 add_library(xgameruntime-common STATIC
         env.c
-        logging.c )
+        logging.c
+        os.c )
 
 target_include_directories(xgameruntime-common
         PUBLIC
