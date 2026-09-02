@@ -79,7 +79,8 @@ set_target_properties(xgameruntime PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" )
 
 target_link_libraries( xgameruntime PRIVATE
-        xgameruntime-common )
+        xgameruntime-common
+        winrt )
 
 target_link_options(xgameruntime PRIVATE
         -static
