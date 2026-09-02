@@ -21,6 +21,7 @@
 
 #include "private.h"
 #include <private/winrt/IAsyncImpl.hpp>
+#include <private/xodusprovider.h>
 
 #include <atomic>
 #include <mutex>
@@ -636,3 +637,7 @@ AsyncAction::Create( IUnknown *invoker, PVOID param, async_operation_callback ca
     TRACE( "created AsyncAction %p\n", *out );
     return S_OK;
 }
+
+template class AsyncOperation<IInspectable*>;
+template class AsyncOperation<ABI::Xodus::IXodusIPCPacket*>;
+template class AsyncOperation<ABI::Xodus::IMsaTokenResponse*>;

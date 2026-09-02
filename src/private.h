@@ -22,9 +22,12 @@
 #define __XGAMERUNTIME_PRIVATE_H__
 
 #define COBJMACROS
-#include <private/logging.h>
+
+#include <winsock2.h>
 #include <windows.h>
 #include <minwindef.h>
+
+#include <private/logging.h>
 
 #ifdef __cplusplus
 // Bug: WinRT in C++ within Wine lacks proper C++ type handling
@@ -51,6 +54,8 @@
 #include <xasyncprovider.h>
 #include <xtaskqueue.h>
 
+#include <private/xodusprovider.h>
+
 #define WIDL_using_Windows_Foundation
 #define WIDL_using_Windows_Foundation_Collections
 #include "windows.foundation.h"
@@ -58,6 +63,10 @@
 #include "windows.globalization.h"
 #define WIDL_using_Windows_System_Profile
 #include "windows.system.profile.h"
+
+#define XODUS_SOCKET_SUFFIX "xodus.sock"
+#define POLL_BUFFER_SIZE 2048
+#define IPC_REQUEST_TIMEOUT_MS 5000
 
 #define E_ILLEGAL_METHOD_CALL                              _HRESULT_TYPEDEF_(0x8000000E)
 

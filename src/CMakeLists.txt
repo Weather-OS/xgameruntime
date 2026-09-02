@@ -10,6 +10,11 @@ add_library(xgameruntime SHARED
 add_dependencies(xgameruntime
         xgameruntime-idl )
 
+# Xodus
+target_sources( xgameruntime PRIVATE
+        Xodus/Structs.cpp
+        Xodus/IPCLayer.cpp )
+
 # System
 target_sources( xgameruntime PRIVATE
         System/XThreading.cpp )
@@ -31,7 +36,8 @@ set_target_properties(xgameruntime PROPERTIES
 
 target_link_libraries( xgameruntime PRIVATE
         xgameruntime-common
-        winrt )
+        winrt
+        ws2_32 )
 
 target_link_options(xgameruntime PRIVATE
         -static
