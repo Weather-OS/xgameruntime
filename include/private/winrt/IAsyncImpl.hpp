@@ -69,7 +69,7 @@ public:
     get_Completed( IAsyncOperationCompletedHandlerImpl **handler ) noexcept override;
 
     HRESULT WINAPI
-    get_Result( PROPVARIANT *result ) noexcept override;
+    get_Result( PROPVARIANT *result ) override; // Function may throw!!!
 
     HRESULT WINAPI
     Start() noexcept override;
@@ -100,19 +100,20 @@ private:
     async_info_callback( TP_CALLBACK_INSTANCE *instance, void *iface, TP_WORK *work );
 
     std::atomic_long ref{ 1 };
-    std::mutex mutex;
+    std::mutex mutex{};
 
-    IAsyncOperationCompletedHandlerImpl *handler;
-    IInspectable *IInspectable_outer;
-    IErrorInfo *errorInfo;
-    IUnknown *invoker;
+    IAsyncOperationCompletedHandlerImpl *handler{ nullptr };
+    IInspectable *IInspectable_outer{ nullptr };
+    IErrorInfo *errorInfo{ nullptr };
+    IUnknown *invoker{ nullptr };
 
-    async_operation_callback callback;
-    AsyncStatus status;
-    PROPVARIANT result;
-    HRESULT hr;
-    TP_WORK *async_run_work;
-    PVOID param;
+    async_operation_callback callback{ nullptr };
+    AsyncStatus status{ Started };
+    PROPVARIANT result{};
+    Exception *cpp_exception{ nullptr };
+    HRESULT hr{ S_OK };
+    TP_WORK *async_run_work{ nullptr };
+    PVOID param{ nullptr };
 };
 
 template<typename T>
@@ -151,7 +152,7 @@ public:
     get_Completed( IAsyncOperationCompletedHandler<T> **inspectable_handler ) noexcept override;
 
     HRESULT WINAPI
-    GetResults( T *results ) noexcept override;
+    GetResults( T *results ) override; // Function may throw!!!
 
     /* Internal methods */
     static HRESULT WINAPI
@@ -160,7 +161,7 @@ public:
 
 private:
     std::atomic_long ref{ 1 };
-    IAsyncInfoImpl *info;
+    IAsyncInfoImpl *info{ nullptr };
 };
 
 class AsyncAction final
@@ -207,7 +208,7 @@ public:
 
 private:
     std::atomic_long ref{ 1 };
-    IAsyncInfoImpl *info;
+    IAsyncInfoImpl *info{ nullptr };
 };
 
 // NOTE: Do not create a non-static instance of this object.

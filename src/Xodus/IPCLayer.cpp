@@ -146,9 +146,8 @@ public:
     HRESULT WINAPI
     InitializeSocket() override
     {
-        IAsyncAction *operation;
         TRACE("\n");
-        return AsyncAction::Create( static_cast<IUnknown *>(this), nullptr, InitializeSocketThread, &operation );
+        return AsyncAction::Create( static_cast<IUnknown *>(this), nullptr, InitializeSocketThread, nullptr );
     }
 
     HRESULT WINAPI

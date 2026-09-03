@@ -80,6 +80,7 @@ AsyncInfo::Release() noexcept
         Close();
 
         if ( invoker ) invoker->Release();
+        delete cpp_exception;
 
         delete this;
     }
@@ -181,7 +182,7 @@ AsyncInfo::get_Completed( IAsyncOperationCompletedHandlerImpl **handler ) noexce
 }
 
 HRESULT WINAPI
-AsyncInfo::get_Result( PROPVARIANT *result ) noexcept
+AsyncInfo::get_Result( PROPVARIANT *result )
 {
     TRACE( "iface %p, result %p.\n", this, result );
 
@@ -195,6 +196,11 @@ AsyncInfo::get_Result( PROPVARIANT *result ) noexcept
         // This is where we resubmit the IRestrictedErrorInfo that we received upon AsyncStatus::Error
         if ( this->status == Error && errorInfo )
             SetErrorInfo( 0, errorInfo );
+
+
+        // Throw if there are outstanding C++ exceptions.
+        if ( cpp_exception )
+            throw Exception( *cpp_exception );
     }
 
     return hr;
@@ -205,7 +211,8 @@ AsyncInfo::Start() noexcept
 {
     TRACE( "iface %p.\n", this );
 
-    IInspectable_outer->AddRef();
+    if ( IInspectable_outer )
+        IInspectable_outer->AddRef();
     SubmitThreadpoolWork( async_run_work );
 
     return S_OK;
@@ -338,7 +345,16 @@ AsyncInfo::async_info_callback( TP_CALLBACK_INSTANCE *instance, void *iface, TP_
 
     TRACE( "instace %p, iface %p, work %p\n", instance, iface, work );
 
-    hr = impl->callback( impl->invoker, impl->param, &result );
+    // C-style definition doesn't allow us to properly safeguard C++ exceptions.
+    // Try to catch it and throw when getting results.
+    try
+    {
+        hr = impl->callback( impl->invoker, impl->param, &result );
+    } catch ( const Exception &e )
+    {
+        hr = e.status;
+        impl->cpp_exception = new Exception( e );
+    }
 
     {
         const std::lock_guard<std::mutex> lock( impl->mutex );
@@ -361,11 +377,21 @@ AsyncInfo::async_info_callback( TP_CALLBACK_INSTANCE *instance, void *iface, TP_
         }
     }
 
+    if ( !operation )
+    {
+        // Self destructing AsyncAction
+        impl->Release();
+        return;
+    }
+
     if ( handler )
     {
         handler->Invoke( operation, status );
         handler->Release();
     }
+
+    /* release refcount acquired in Start */
+    operation->Release();
 }
 
 template<typename T>
@@ -407,7 +433,10 @@ AsyncOperation<T>::Release() noexcept
     TRACE( "iface %p decreasing refcount to %lu.\n", this, curr );
 
     if ( !curr )
+    {
+        info->Release();
         delete this;
+    }
 
     return curr;
 }
@@ -472,7 +501,7 @@ AsyncOperation<T>::get_Completed( IAsyncOperationCompletedHandler<T> **inspectab
 
 template<typename T>
 HRESULT WINAPI
-AsyncOperation<T>::GetResults( T *results ) noexcept
+AsyncOperation<T>::GetResults( T *results )
 {
     TRACE( "iface %p.\n", this );
 
@@ -546,7 +575,10 @@ AsyncAction::Release() noexcept
     TRACE( "iface %p decreasing refcount to %lu.\n", this, curr );
 
     if ( !curr )
+    {
+        info->Release();
         delete this;
+    }
 
     return curr;
 }
@@ -622,20 +654,36 @@ HRESULT WINAPI
 AsyncAction::Create( IUnknown *invoker, PVOID param, async_operation_callback callback,
                                         IAsyncAction **out )
 {
-    AsyncAction *impl = new AsyncAction();
+    AsyncAction *impl;
+    IAsyncInfoImpl *info;
     HRESULT hr;
 
-    if ( FAILED( hr = AsyncInfo::Create( invoker, param, callback, static_cast<IInspectable *>(impl), &impl->info ) ) ||
-         FAILED( hr = impl->info->Start() ) )
+    if ( !out )
     {
-        impl->info->Release();
-        delete impl;
-        return hr;
-    }
+        // Self destructing AsyncAction
+        if ( FAILED( hr = AsyncInfo::Create( invoker, param, callback, nullptr, &info ) ) ||
+             FAILED( hr = info->Start() ) )
+        {
+            info->Release();
+            return hr;
+        }
 
-    *out = impl;
-    TRACE( "created AsyncAction %p\n", *out );
-    return S_OK;
+        return S_OK;
+    } else
+    {
+        impl = new AsyncAction();
+        if ( FAILED( hr = AsyncInfo::Create( invoker, param, callback, static_cast<IInspectable *>(impl), &impl->info ) ) ||
+             FAILED( hr = impl->info->Start() ) )
+        {
+            impl->info->Release();
+            delete impl;
+            return hr;
+        }
+
+        *out = impl;
+        TRACE( "created AsyncAction %p\n", *out );
+        return S_OK;
+    }
 }
 
 template class AsyncOperation<IInspectable*>;
