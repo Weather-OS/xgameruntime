@@ -34,7 +34,7 @@ if(WIN32)
 endif()
 
 set_target_properties(xgameruntime PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" )
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" )
 
 target_link_libraries( xgameruntime PRIVATE
         xgameruntime-common

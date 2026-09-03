@@ -3,6 +3,7 @@ add_executable(test_xgameruntime
 
 target_link_libraries(test_xgameruntime
         PRIVATE
+        xgameruntime
         GTest::gtest_main )
 
 target_link_options(test_xgameruntime PRIVATE
@@ -19,6 +20,10 @@ include( GoogleTest )
 target_include_directories(test_xgameruntime
         PRIVATE
         ${CMAKE_SOURCE_DIR}/external/googletest/googletest/include )
+
+# For discovery purposes.
+set_target_properties(test_xgameruntime PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" )
 
 if( CMAKE_CROSSCOMPILING )
     message( STATUS "We are cross compiling tests" )
