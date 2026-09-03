@@ -92,17 +92,18 @@ add_custom_target(xgameruntime-idl
 # Dependencies
 # ---------------------------------------------------------------------------
 
-set(LIBXML2_WITH_PYTHON OFF CACHE BOOL "" FORCE)
-set(LIBXML2_WITH_TESTS OFF CACHE BOOL "" FORCE)
-set(LIBXML2_WITH_PROGRAMS OFF CACHE BOOL "" FORCE)
-set(LIBXML2_WITH_ICONV OFF CACHE BOOL "" FORCE)
-set(LIBXML2_WITH_LZMA OFF CACHE BOOL "" FORCE)
-set(LIBXML2_WITH_ZLIB OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+# We only need libxml2's static library compiled for Windows.
+set( LIBXML2_WITH_PYTHON OFF CACHE BOOL "" FORCE )
+set( LIBXML2_WITH_TESTS OFF CACHE BOOL "" FORCE )
+set( LIBXML2_WITH_PROGRAMS OFF CACHE BOOL "" FORCE )
+set( LIBXML2_WITH_ICONV OFF CACHE BOOL "" FORCE )
+set( LIBXML2_WITH_LZMA OFF CACHE BOOL "" FORCE )
+set( LIBXML2_WITH_ZLIB OFF CACHE BOOL "" FORCE )
+set( BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE )
 
 add_subdirectory(
         ${CMAKE_SOURCE_DIR}/external/libxml2
-        ${CMAKE_BINARY_DIR}/libxml2
+        ${CMAKE_BINARY_DIR}/external/libxml2
         EXCLUDE_FROM_ALL )
 
 include_directories( ${PROJECT_SOURCE_DIR}/include )
