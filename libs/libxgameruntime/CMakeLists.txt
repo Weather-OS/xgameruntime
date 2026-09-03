@@ -1,0 +1,16 @@
+add_library(libxgameruntime STATIC
+        Init.cpp )
+
+add_dependencies(libxgameruntime
+        xgameruntime-common
+        xgameruntime-idl )
+
+target_include_directories(libxgameruntime
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${IDL_BINARY_DIR} )
+
+if(WIN32)
+    set_target_properties(libxgameruntime PROPERTIES
+            PREFIX "" )
+endif()
