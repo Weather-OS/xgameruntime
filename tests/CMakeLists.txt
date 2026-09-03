@@ -33,4 +33,7 @@ if( CMAKE_CROSSCOMPILING )
             "${WINE_EXECUTABLE}" )
 endif()
 
-gtest_discover_tests( test_xgameruntime )
+# We should not be pre-running tests during build.
+gtest_discover_tests(
+        test_xgameruntime
+        DISCOVERY_MODE PRE_TEST )
