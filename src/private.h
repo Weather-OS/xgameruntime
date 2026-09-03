@@ -72,4 +72,14 @@
 
 extern IXThreadingImpl *x_threading_impl;
 
+#ifdef __cplusplus
+extern ABI::Xodus::IIPCLayer *xodus_ipclayer;
+extern ABI::Xodus::IXodusService *xodus_service;
+extern ABI::Xodus::IXodusXMLBuilder *xodus_xml_builder;
+#else
+extern IIPCLayer *xodus_ipclayer;
+extern IXodusService *xodus_service;
+extern IXodusXMLBuilder *xodus_xml_builder;
+#endif
+
 #endif

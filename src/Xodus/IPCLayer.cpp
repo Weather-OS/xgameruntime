@@ -144,7 +144,7 @@ public:
 
     /* IIPCLayer Methods */
     HRESULT WINAPI
-    InitializeSocket()
+    InitializeSocket() override
     {
         IAsyncAction *operation;
         TRACE("\n");
@@ -495,13 +495,18 @@ private:
         if ( FAILED( hstatus ) ) return hstatus;
 
         status = ConnectSocket( XODUS_SOCKET_SUFFIX );
-        if ( FAILED( status ) ) return HRESULT_FROM_NT( status );
-        
+        if ( FAILED( status ) )
+        {
+            MessageBoxA( nullptr, "Xodus Socket is not available! Xbox functionality will be missing.", "Warning", MB_ICONWARNING );
+            throw Exception( HRESULT_FROM_NT( status ), "Xodus Socket is not available! Xbox functionality will be missing" );
+        }
+
         // Automatically broken when the DLL is detatched.
         while ( TRUE )
         {
             status = PollSocket( &currentPoll );
-            if ( FAILED( status ) ) return HRESULT_FROM_NT( status );
+            if ( FAILED( status ) )
+                break;
 
             // Multiple messages may arrive at the same time.
             // Try to parse them all
@@ -574,6 +579,8 @@ private:
             }
         }
 
+        MessageBoxA( nullptr, "Socket Thread unexpectedly exited!", "Critical Error Occurred!", MB_ICONERROR );
+        throw Exception( HRESULT_FROM_NT( status ), "Socket Thread unexpectedly exited!" );
         bufferFactory->Release();
         return S_OK;
     }
