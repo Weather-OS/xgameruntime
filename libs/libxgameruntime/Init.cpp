@@ -24,7 +24,15 @@
 #include <windows.h>
 #include <xgameruntimeinit.h>
 
-HRESULT __stdcall XGameRuntimeInitializeWithOptions( const XGameRuntimeOptions* options )
+HRESULT __stdcall
+XGameRuntimeInitializeWithOptions(
+    const XGameRuntimeOptions* options
+) {
+    return E_NOTIMPL;
+}
+
+HRESULT __stdcall
+XGameRuntimeInitialize()
 {
     return E_NOTIMPL;
 }

@@ -19,6 +19,7 @@ include( GoogleTest )
 
 target_include_directories(test_xgameruntime
         PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
         ${CMAKE_SOURCE_DIR}/external/googletest/googletest/include )
 
 # For discovery purposes.

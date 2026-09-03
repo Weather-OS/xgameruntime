@@ -19,29 +19,15 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+
 #include <gtest/gtest.h>
 
-int add(int a, int b)
-{
-    return a + b;
-}
+#include <windows.h>
+#include <xgameruntimeinit.h>
 
-TEST(AddTest, AddsPositiveNumbers)
-{
-    EXPECT_EQ(add(2, 3), 5);
-}
+static HMODULE module = nullptr;
 
-TEST(AddTest, AddsNegativeNumbers)
+TEST(Library, Load_Runtime)
 {
-    EXPECT_EQ(add(-2, -3), -5);
-}
-
-TEST(AddTest, AddsZero)
-{
-    EXPECT_EQ(add(42, 0), 44); // Intentional failure
-}
-
-TEST(AddTest, IntentionalFailure)
-{
-    FAIL() << "This test is supposed to fail";
+    EXPECT_EQ( S_OK, XGameRuntimeInitialize() );
 }
