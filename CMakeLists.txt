@@ -106,6 +106,16 @@ add_subdirectory(
         ${CMAKE_BINARY_DIR}/external/libxml2
         EXCLUDE_FROM_ALL )
 
+if(ENABLE_TESTS)
+    enable_testing()
+    message( STATUS "Tests are enabled." )
+    add_subdirectory(
+            ${CMAKE_SOURCE_DIR}/external/googletest
+            ${CMAKE_BINARY_DIR}/external/googletest
+            EXCLUDE_FROM_ALL )
+    add_subdirectory( tests )
+endif()
+
 include_directories( ${PROJECT_SOURCE_DIR}/include )
 
 add_subdirectory( src )
