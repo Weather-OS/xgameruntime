@@ -204,7 +204,7 @@ public:
     /* Internal methods */
     static HRESULT WINAPI
     Create( IUnknown *invoker, PVOID param, async_operation_callback callback,
-                                        IAsyncAction **out );
+                                        IAsyncAction **out /* Leave as nullptr to create a self destructing action */ );
 
 private:
     std::atomic_long ref{ 1 };

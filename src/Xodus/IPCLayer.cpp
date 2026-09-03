@@ -26,12 +26,11 @@
 #include <private/os.h>
 #include <private/env.h>
 
+#include "Structs.hpp"
+
 #include <ntstatus.h>
 #include <winstring.h>
 #include <afunix.h>
-
-#include "Structs.hpp"
-
 #include <atomic>
 
 using namespace ABI;
