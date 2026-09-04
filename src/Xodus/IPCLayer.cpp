@@ -351,6 +351,7 @@ private:
             MessageBoxA( nullptr, "Xodus Socket is not available! Xbox functionality will be missing.", "Warning", MB_ICONWARNING );
             throw Exception( HRESULT_FROM_NT( status ), "Xodus Socket is not available! Xbox functionality will be missing" );
         }
+
         // Automatically broken when the DLL is detatched.
         while ( TRUE )
         {
