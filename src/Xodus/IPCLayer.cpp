@@ -154,6 +154,8 @@ public:
     {
         HRESULT hr;
 
+        TRACE("packet %p, operation %p.\n", packet, operation );
+
         packet->AddRef();
         hr = AsyncOperation<IXodusIPCPacket *>::Create( static_cast<IUnknown *>(this),
                                 packet, SendRequest, operation );
@@ -553,6 +555,7 @@ private:
 
                 RtlCopyMemory( (PVOID)messageBuffer, (PVOID)(currentPoll.curr_buffer + offset + sizeof(IPCHeader_CTYPE)), header->MessageLength );
                 hstatus = message->put_Length( static_cast<UINT32>(header->MessageLength) );
+                if ( FAILED( hstatus ) ) return hstatus; //something went horribly wrong.
                 offset += sizeof(IPCHeader_CTYPE) + header->MessageLength;
 
                 messageBuffer[header->MessageLength] = '\0';
@@ -578,9 +581,8 @@ private:
         }
 
         MessageBoxA( nullptr, "Socket Thread unexpectedly exited!", "Critical Error Occurred!", MB_ICONERROR );
-        throw Exception( HRESULT_FROM_NT( status ), "Socket Thread unexpectedly exited!" );
         bufferFactory->Release();
-        return S_OK;
+        throw Exception( HRESULT_FROM_NT( status ), "Socket Thread unexpectedly exited!" );
     }
 
     struct response_received_callback
