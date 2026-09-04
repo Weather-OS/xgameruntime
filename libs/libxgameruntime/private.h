@@ -35,11 +35,14 @@
  *   Logging initialization is separate from xgameruntime.dll
  *  They both would share the same environment variables.
  */
-inline LONG loggerInitialized = FALSE;
+inline volatile LONG loggerInitialized = FALSE;
 inline void ensureLoggerInitialized()
 {
     if ( !loggerInitialized )
+    {
         InitializeLogging();
+        loggerInitialized = TRUE;
+    }
 }
 
 namespace GlobalState
