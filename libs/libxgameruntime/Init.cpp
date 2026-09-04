@@ -162,3 +162,10 @@ XGameRuntimeInitialize()
 {
     return XGameRuntimeInitializeWithOptions( nullptr );
 }
+
+void __stdcall
+XGameRuntimeUninitialize()
+{
+    if ( GlobalState::initialized && GlobalState::UninitializeApiImpl )
+        GlobalState::UninitializeApiImpl();
+}
