@@ -19,9 +19,18 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#ifndef XGAMERUNTIME_TEST_FIXTURES_H
+#define XGAMERUNTIME_TEST_FIXTURES_H
+
 #include <gtest/gtest.h>
 
-#include "test_fixtures.h"
+/** Test fixtures for initializing xgameruntime **/
 
-#include <windows.h>
-#include <xgameruntimeinit.h>
+class XGameRuntimeTest : public ::testing::Test
+{
+protected:
+    static void SetUpTestSuite();
+    static void TearDownTestSuite();
+};
+
+#endif

@@ -19,9 +19,17 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <gtest/gtest.h>
-
 #include "test_fixtures.h"
 
 #include <windows.h>
 #include <xgameruntimeinit.h>
+
+void XGameRuntimeTest::SetUpTestSuite()
+{
+    XGameRuntimeInitialize();
+}
+
+void XGameRuntimeTest::TearDownTestSuite()
+{
+    XGameRuntimeUninitialize();
+}

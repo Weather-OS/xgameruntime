@@ -21,7 +21,5 @@
 
 #include <gtest/gtest.h>
 
-#include "test_fixtures.h"
-
 #include <windows.h>
 #include <xgameruntimeinit.h>
