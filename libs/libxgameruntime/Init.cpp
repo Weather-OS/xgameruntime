@@ -19,8 +19,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <mutex>
-
+#include <initguid.h>
 #include "private.h"
 
 HRESULT __stdcall
@@ -117,11 +116,10 @@ XGameRuntimeInitializeWithOptions(
                 {
                     LPCSTR errorMessage = "XGameRuntime is outdated and does not support these initialization options.";
                     ERR("%s\n", errorMessage);
-                    if ( FAILED( status = GlobalState::XErrorReport( E_GAMERUNTIME_OPTIONS_NOT_SUPPORTED, errorMessage ) ) )
-                        return status;
+                    GlobalState::XErrorReport( E_GAMERUNTIME_OPTIONS_NOT_SUPPORTED, errorMessage );
                     return E_GAMERUNTIME_OPTIONS_NOT_SUPPORTED;
                 }
-                GlobalState::InitializeApiImplEx2( GDKC_VERSION, GAMING_SERVICES_VERSION, 6, &initOptions );
+                status = GlobalState::InitializeApiImplEx2( GDKC_VERSION, GAMING_SERVICES_VERSION, 6, &initOptions );
             }
         }
         else
@@ -149,8 +147,7 @@ XGameRuntimeInitializeWithOptions(
                         return status;
                     ERR("%s\n", errorMessage);
                     // This path throws E_GAMERUNTIME_NOT_INITIALIZED instead.
-                    if ( FAILED( status = GlobalState::XErrorReport( E_GAMERUNTIME_NOT_INITIALIZED, errorMessage ) ) )
-                        return status;
+                    GlobalState::XErrorReport( E_GAMERUNTIME_NOT_INITIALIZED, errorMessage );
                     return E_GAMERUNTIME_NOT_INITIALIZED;
                 }
             }

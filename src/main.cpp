@@ -116,7 +116,7 @@ HRESULT WINAPI QueryApiImpl( REFCLSID clsid, REFIID iid, void **out )
     }
 
     FIXME( "%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid( &clsid ) );
-    return HRESULT_FROM_WIN32( ERROR_NOT_SUPPORTED );
+    return REGDB_E_CLASSNOTREG;
 }
 
 HRESULT WINAPI UninitializeApiImpl()

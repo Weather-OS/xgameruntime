@@ -1,6 +1,6 @@
 /*
  * Xbox Game runtime Library
- *  Static Library -> XGameRuntimeInit
+ *  Static Library -> General Errors
  *
  * Written by Weather
  *
@@ -19,12 +19,15 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+
 #include <mutex>
 
 #include "private.h"
 
 HRESULT CheckXGameRuntimeInitialized()
 {
+    ensureLoggerInitialized();
+
     if ( !GlobalState::initialized )
     {
         ERR("XGameRuntimeInitialize must be called before making this call.");

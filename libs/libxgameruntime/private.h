@@ -26,10 +26,50 @@
 #include <windows.h>
 #include <winstring.h>
 
+#ifdef __cplusplus
+// Bug: WinRT in C++ within Wine lacks proper C++ type handling
+// Redefine boolean as bool, and DOUBLE as double to prevent compile issues.
+// Casting is purely handled by libstdc++, so it's not an issue here.
+#undef boolean
+#define boolean bool
+#undef DOUBLE
+#define DOUBLE double
+
+// Bug: __WINESRC__ is not defined in C++ contexts.
+#define __WINESRC__ 1
+#include <cstdint>
+#endif
+
+#define WIDL_EXPLICIT_AGGREGATE_RETURNS
+
 #include <version.h>
 #include <xgameruntimeinit.h>
 #include <xgameerr.h>
+#include <xtaskqueue.h>
+#include <xasyncprovider.h>
+#include <xaccessibility.h>
+#include <xappcapture.h>
+#include <xdisplay.h>
+#include <xerror.h>
+#include <xgame.h>
+#include <xgameactivation.h>
+#include <xgameevent.h>
+#include <xgameinvite.h>
+#include <xgameprotocol.h>
+#include <xgameruntimefeature.h>
+#include <xgamesave.h>
+#include <xgamestreaming.h>
+#include <xgameui.h>
+#include <xnetworking.h>
+#include <xpackage.h>
+#include <xpersistentlocalstorage.h>
+#include <xstore.h>
+#include <xsystem.h>
+#include <xuser.h>
+#include <xasync.h>
 
+#include <mutex>
+#include <type_traits>
 
 /**
  *   Logging initialization is separate from xgameruntime.dll

@@ -1,6 +1,7 @@
 add_library(libxgameruntime STATIC
         Init.cpp
-        Error.cpp )
+        Error.cpp
+        Impl.cpp)
 
 target_link_libraries(libxgameruntime PRIVATE
         xgameruntime-common )
