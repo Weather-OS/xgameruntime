@@ -24,9 +24,11 @@
 
 #include <gtest/gtest.h>
 
+#define __WINESRC__
+
 /** Test fixtures for initializing xgameruntime **/
 
-class XGameRuntimeTest : public ::testing::Test
+class XGameRuntimeTests : public ::testing::Test
 {
 protected:
     static void SetUpTestSuite();

@@ -24,12 +24,12 @@
 #include <windows.h>
 #include <xgameruntimeinit.h>
 
-void XGameRuntimeTest::SetUpTestSuite()
+void XGameRuntimeTests::SetUpTestSuite()
 {
     XGameRuntimeInitialize();
 }
 
-void XGameRuntimeTest::TearDownTestSuite()
+void XGameRuntimeTests::TearDownTestSuite()
 {
     XGameRuntimeUninitialize();
 }
