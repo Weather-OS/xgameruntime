@@ -1,6 +1,11 @@
 cmake_minimum_required( VERSION 3.20 )
 
-project( xgameruntime LANGUAGES C CXX )
+set( GDKC_VERSION 10002 )
+set( GAMING_SERVICES_VERSION 7874 )
+
+project(xgameruntime
+        LANGUAGES C CXX
+        VERSION ${GDKC_VERSION}.${GAMING_SERVICES_VERSION} )
 
 include( ExternalProject )
 
@@ -31,7 +36,6 @@ set(IDL_SOURCE_DIR
 
 set(IDL_BINARY_DIR
         ${CMAKE_CURRENT_BINARY_DIR}/include )
-
 
 # ------------------------------------------------------------
 # IDL generation
@@ -115,6 +119,14 @@ if(ENABLE_TESTS)
             EXCLUDE_FROM_ALL )
     add_subdirectory( tests )
 endif()
+
+# ---------------------------------------------------------------------------
+# Versioning
+# ---------------------------------------------------------------------------
+configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/version.h.in
+        ${CMAKE_CURRENT_BINARY_DIR}/include/version.h
+        @ONLY )
 
 include_directories( ${PROJECT_SOURCE_DIR}/include )
 

@@ -4,7 +4,7 @@ add_library(winrt STATIC
 add_dependencies(winrt
         xgameruntime-idl )
 
-target_link_libraries( winrt PRIVATE
+target_link_libraries(winrt PRIVATE
         xgameruntime-common
         runtimeobject )
 
