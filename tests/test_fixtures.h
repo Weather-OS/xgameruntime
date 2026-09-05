@@ -26,7 +26,9 @@
 
 #define __WINESRC__
 
-/** Test fixtures for initializing xgameruntime **/
+/** Test fixtures for initializing xgameruntime
+ *  These are for general test cases.
+ *  It's recommended that each test includes its own fixture **/
 
 class XGameRuntimeTests : public ::testing::Test
 {
