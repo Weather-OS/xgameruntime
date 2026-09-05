@@ -100,6 +100,7 @@ IMPL_CALL( HRESULT, XTaskQueueCreateComposite, (XTaskQueuePortHandle workPort, X
 IMPL_CALL( HRESULT, XTaskQueueGetPort, (XTaskQueueHandle queue, XTaskQueuePort port, XTaskQueuePortHandle *portHandle), (queue, port, portHandle) )
 IMPL_CALL( HRESULT, XTaskQueueDuplicateHandle, (XTaskQueueHandle queueHandle, XTaskQueueHandle *duplicatedHandle), (queueHandle, duplicatedHandle) )
 IMPL_CALL( BOOLEAN, XTaskQueueDispatch, (XTaskQueueHandle queue, XTaskQueuePort port, UINT32 timeoutInMs), (queue, port, timeoutInMs) )
+IMPL_CALL( BOOLEAN, XTaskQueueIsEmpty, (XTaskQueueHandle queue, XTaskQueuePort port), (queue, port) )
 IMPL_CALL( void, XTaskQueueCloseHandle, (XTaskQueueHandle queue), (queue) )
 IMPL_CALL( HRESULT, XTaskQueueSubmitCallback, (XTaskQueueHandle queue, XTaskQueuePort port, void *callbackContext, XTaskQueueCallback *callback), (queue, port, callbackContext, callback) )
 IMPL_CALL( HRESULT, XTaskQueueSubmitDelayedCallback, (XTaskQueueHandle queue, XTaskQueuePort port, UINT32 delayMs, void *callbackContext, XTaskQueueCallback *callback), (queue, port, delayMs, callbackContext, callback) )
