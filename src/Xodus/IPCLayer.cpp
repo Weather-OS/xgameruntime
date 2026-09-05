@@ -521,12 +521,12 @@ private:
 
                 header = reinterpret_cast<IPCHeader_CTYPE *>( currentPoll.curr_buffer + offset );
 
-                if ( header->Magic == MagicHeaderType::Proto )
+                if ( header->Magic == MagicHeaderType_Proto )
                 {
                     FIXME("Proto is not yet supported!\n");
                     break;
                 }
-                else if ( header->Magic != MagicHeaderType::XML )
+                else if ( header->Magic != MagicHeaderType_XML )
                 {
                     FIXME("Invalid magic header %#x received!\n", (int)header->Magic);
                     break;

@@ -60,7 +60,7 @@ public:
     HRESULT WINAPI get_Message( ABI::Windows::Storage::Streams::IBuffer **out ) override;
 
 private:
-    MagicHeaderType Magic{ 0 };
+    MagicHeaderType Magic{};
     UINT16 Message_Type{ 0 };
     ABI::Windows::Storage::Streams::IBuffer *Message{ nullptr };
     std::atomic_long ref{ 1 };

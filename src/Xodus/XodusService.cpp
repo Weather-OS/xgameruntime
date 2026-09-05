@@ -190,7 +190,7 @@ private:
 
         // Construct a new IPC Packet
         xodusPacket = new XodusIPCPacket(
-            MagicHeaderType::XML,
+            MagicHeaderType_XML,
             3 /* MsaTokenRequest */,
             message
         );
@@ -272,7 +272,7 @@ _CLEANUP:
 
         // Construct a new IPC Packet
         xodusPacket = new XodusIPCPacket(
-            MagicHeaderType::XML,
+            MagicHeaderType_XML,
             1 /* PING */,
             message
         );
