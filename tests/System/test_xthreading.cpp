@@ -20,8 +20,9 @@
 
 #include "../test_fixtures.h"
 
-#include <windows.h>
+#include <thread>
 
+#include <windows.h>
 #include <xasync.h>
 #include <xasyncprovider.h>
 #include <xgameruntimeinit.h>
