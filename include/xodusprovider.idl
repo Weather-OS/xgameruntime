@@ -70,7 +70,7 @@ namespace Xodus
     }
 
     [
-        contract(Windows.Foundation.UniversalApiContract, 1.0)
+        contract(XGameRuntime.XGameRuntimeContract, 1.0)
     ]
     enum MagicHeaderType
     {
@@ -79,11 +79,13 @@ namespace Xodus
     };
 
     [
+        contract(XGameRuntime.XGameRuntimeContract, 1.0),
         uuid(e5670e5d-a32e-47e0-91c6-12163115072b)
     ]
     delegate HRESULT IPCResponseHandler( IXodusIPCPacket *reponse );
 
     [
+        contract(XGameRuntime.XGameRuntimeContract, 1.0),
         uuid(fb150d06-cbf2-4a66-9401-57bcbef19068)
     ]
     interface IXodusIPCPacket : IInspectable
@@ -94,6 +96,7 @@ namespace Xodus
     }
 
     [
+        contract(XGameRuntime.XGameRuntimeContract, 1.0),
         uuid(f7904b4d-4738-4485-a517-b37405aa5b91)
     ]
     interface IIPCLayer : IInspectable
@@ -105,6 +108,7 @@ namespace Xodus
     }
 
     [
+        contract(XGameRuntime.XGameRuntimeContract, 1.0),
         uuid(852d70bb-c6de-447a-8082-61646691295e)
     ]
     interface IXodusService : IInspectable
@@ -114,6 +118,7 @@ namespace Xodus
     }
 
     [
+        contract(XGameRuntime.XGameRuntimeContract, 1.0),
         uuid(7f70954e-1d3b-4d44-ab18-e43add94657c)
     ]
     interface IXodusXMLBuilder : IInspectable
@@ -124,6 +129,7 @@ namespace Xodus
 
 
     [
+        contract(XGameRuntime.XGameRuntimeContract, 1.0),
         uuid(c25f9827-7718-48ea-aa4d-1567eba692d5)
     ]
     interface IMsaTokenResponse : IInspectable
@@ -133,7 +139,7 @@ namespace Xodus
     }
 
     [
-        contract(Windows.Foundation.UniversalApiContract, 1.0)
+        contract(XGameRuntime.XGameRuntimeContract, 1.0)
     ]
     runtimeclass XodusService
     {
@@ -141,7 +147,7 @@ namespace Xodus
     }
 
     [
-        contract(Windows.Foundation.UniversalApiContract, 1.0)
+        contract(XGameRuntime.XGameRuntimeContract, 1.0)
     ]
     runtimeclass XodusXMLBuilder
     {
@@ -149,7 +155,7 @@ namespace Xodus
     }
 
     [
-        contract(Windows.Foundation.UniversalApiContract, 1.0)
+        contract(XGameRuntime.XGameRuntimeContract, 1.0)
     ]
     runtimeclass IPCLayer
     {
