@@ -54,6 +54,11 @@ public:
     ULONG WINAPI AddRef() noexcept override;
     ULONG WINAPI Release() noexcept override;
 
+    /* IInspectable Methods */
+    HRESULT WINAPI GetIids( ULONG *iidCount, IID **iids ) override;
+    HRESULT WINAPI GetRuntimeClassName( HSTRING *className ) override;
+    HRESULT WINAPI GetTrustLevel( TrustLevel *trustLevel ) override;
+
     /* IXodusIPCPacket Methods */
     HRESULT WINAPI get_Magic( MagicHeaderType *out ) override;
     HRESULT WINAPI get_MessageType( UINT16 *out ) override;
@@ -112,6 +117,11 @@ public:
     HRESULT WINAPI QueryInterface( REFIID iid, void **out ) noexcept override;
     ULONG WINAPI AddRef() noexcept override;
     ULONG WINAPI Release() noexcept override;
+
+    /* IInspectable Methods */
+    HRESULT WINAPI GetIids( ULONG *iidCount, IID **iids ) override;
+    HRESULT WINAPI GetRuntimeClassName( HSTRING *className ) override;
+    HRESULT WINAPI GetTrustLevel( TrustLevel *trustLevel ) override;
 
     /* IMsaTokenResponse Methods */
     HRESULT WINAPI get_Token( HSTRING *out ) override;

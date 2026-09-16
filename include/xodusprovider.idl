@@ -86,7 +86,7 @@ namespace Xodus
     [
         uuid(fb150d06-cbf2-4a66-9401-57bcbef19068)
     ]
-    interface IXodusIPCPacket : IUnknown
+    interface IXodusIPCPacket : IInspectable
     {
         [propget] HRESULT Magic( [out, retval] MagicHeaderType *out );
         [propget] HRESULT MessageType( [out, retval] UINT16 *out );
@@ -126,7 +126,7 @@ namespace Xodus
     [
         uuid(c25f9827-7718-48ea-aa4d-1567eba692d5)
     ]
-    interface IMsaTokenResponse : IUnknown
+    interface IMsaTokenResponse : IInspectable
     {
         [propget] HRESULT Token( [out, retval] HSTRING *out );
         [propget] HRESULT Expiry( [out, retval] Windows.Foundation.DateTime *out );

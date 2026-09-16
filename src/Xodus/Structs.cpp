@@ -84,6 +84,28 @@ XodusIPCPacket::Release() noexcept
 }
 
 HRESULT WINAPI
+XodusIPCPacket::GetIids( ULONG *iidCount, IID **iids )
+{
+    FIXME("iface %p, iidCount %p, iids %p stub!\n", this, iidCount, iids);
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI
+XodusIPCPacket::GetRuntimeClassName( HSTRING *className )
+{
+    FIXME("iface %p, className %p stub!\n", this, className);
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI
+XodusIPCPacket::GetTrustLevel( TrustLevel *trustLevel )
+{
+    FIXME("iface %p, trustLevel %p stub!\n", this, trustLevel);
+    return E_NOTIMPL;
+}
+
+
+HRESULT WINAPI
 XodusIPCPacket::get_Magic( MagicHeaderType *out )
 {
     TRACE("iface %p, out %p.\n", this, out);
@@ -228,6 +250,27 @@ MsaTokenResponse::Release() noexcept
     }
 
     return curr;
+}
+
+HRESULT WINAPI
+MsaTokenResponse::GetIids( ULONG *iidCount, IID **iids )
+{
+    FIXME("iface %p, iidCount %p, iids %p stub!\n", this, iidCount, iids);
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI
+MsaTokenResponse::GetRuntimeClassName( HSTRING *className )
+{
+    FIXME("iface %p, className %p stub!\n", this, className);
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI
+MsaTokenResponse::GetTrustLevel( TrustLevel *trustLevel )
+{
+    FIXME("iface %p, trustLevel %p stub!\n", this, trustLevel);
+    return E_NOTIMPL;
 }
 
 HRESULT WINAPI
