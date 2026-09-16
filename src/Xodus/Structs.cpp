@@ -47,7 +47,6 @@ XodusIPCPacket::QueryInterface( REFIID iid, void **out ) noexcept
 
     if ( iid == __uuidof( IUnknown ) ||
          iid == __uuidof( IInspectable ) ||
-         iid == __uuidof( IAgileObject ) ||
          iid == __uuidof( IXodusIPCPacket ) )
     {
         AddRef();
@@ -152,7 +151,6 @@ IPCResponseHandler::QueryInterface( REFIID iid, void **out ) noexcept
 
     if ( iid == __uuidof( IUnknown ) ||
          iid == __uuidof( IInspectable ) ||
-         iid == __uuidof( IAgileObject ) ||
          iid == __uuidof( IIPCResponseHandler ) )
     {
         AddRef();
@@ -216,7 +214,6 @@ MsaTokenResponse::QueryInterface( REFIID iid, void **out ) noexcept
 
     if ( iid == __uuidof( IUnknown ) ||
          iid == __uuidof( IInspectable ) ||
-         iid == __uuidof( IAgileObject ) ||
          iid == __uuidof( IMsaTokenResponse ) )
     {
         AddRef();
