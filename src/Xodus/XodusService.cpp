@@ -141,7 +141,7 @@ private:
     };
 
     static HRESULT WINAPI
-    MsaTokenRequestAsync( IUnknown *invoker, PVOID param, PROPVARIANT *result )
+    MsaTokenRequestAsync( IUnknown *invoker, PVOID param, IMsaTokenResponse **result )
     {
         auto params = static_cast<MsaTokenRequestParams *>(param);
 
@@ -215,8 +215,7 @@ private:
 
         if ( SUCCEEDED( status ) )
         {
-            result->vt = VT_UNKNOWN;
-            result->punkVal = tokenResponse;
+            *result = tokenResponse;
 
             if ( messageType != 4 /* MsaTokenResponse */ )
                 status = E_INVALIDARG;
@@ -237,7 +236,7 @@ _CLEANUP:
     }
 
     static HRESULT WINAPI
-    PingAsync( IUnknown *invoker, PVOID param, PROPVARIANT *result )
+    PingAsync( IUnknown *invoker, PVOID param, IUnknown **result )
     {
         DWORD ret;
         UINT16 messageType;

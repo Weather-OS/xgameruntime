@@ -372,7 +372,7 @@ private:
     }
 
     static HRESULT WINAPI
-    SendRequest( IUnknown *invoker, PVOID param, PROPVARIANT *result )
+    SendRequest( IUnknown *invoker, PVOID param, IXodusIPCPacket **result )
     {
         auto iface = dynamic_cast<IPCLayer *>( invoker );
         auto packet = static_cast<IXodusIPCPacket *>( param );
@@ -435,8 +435,7 @@ private:
             return HRESULT_FROM_NT( STATUS_TIMEOUT );
         }
 
-        result->vt = VT_UNKNOWN;
-        result->punkVal = context.response;
+        *result = context.response;
 
         return S_OK;
     }
@@ -466,7 +465,7 @@ private:
     }
 
     static HRESULT WINAPI
-    InitializeSocketThread( IUnknown *invoker, PVOID param, PROPVARIANT *result )
+    InitializeSocketThread( IUnknown *invoker, PVOID param, IUnknown **result )
     {
         auto iface = dynamic_cast<IPCLayer *>( invoker );
 

@@ -32,8 +32,11 @@
 using namespace ABI;
 using namespace ABI::XGameRuntime;
 
-typedef HRESULT (WINAPI *async_operation_callback)( IUnknown *invoker, PVOID param, PROPVARIANT *result );
+template<typename T>
+using async_operation_callback = HRESULT (WINAPI *)( IUnknown *invoker, PVOID param, T *result );
 
+// Avoid passing raw interfaces to XAsync, as T needs to be trivially copyable.
+// Use interface pointers instead such as XAsync<IUnknown *>.
 template<typename T>
 class XAsync
     : public IXAsync<T>
@@ -156,30 +159,37 @@ public:
         return S_OK;
     }
 
+    XAsyncBlock* WINAPI
+    get_Block() noexcept override
+    {
+        return &block;
+    }
+
     HRESULT WINAPI
     GetResults( BOOLEAN wait, T *results ) override
     {
         HRESULT hr;
-        PROPVARIANT result;
+        T result;
 
         TRACE( "iface %p, results %p\n", this, results );
+
+        if ( !results )
+            return E_POINTER;
 
         hr = XAsyncGetStatus( &block, wait );
         if ( FAILED( hr ) ) return hr;
 
-        hr = XAsyncGetResult( &block, (PVOID)Create, sizeof(PROPVARIANT), &result, nullptr );
+        hr = XAsyncGetResult( &block, (PVOID)Create, sizeof(T), &result, nullptr );
         if ( FAILED( hr ) ) return hr;
 
-        if ( result.vt == VT_UNKNOWN )
-            *results = static_cast<T>(result.punkVal);
+        *results = result;
 
-        PropVariantClear( &result );
         return S_OK;
     }
 
     /* Internal methods */
     static HRESULT WINAPI
-    Create( IUnknown *invoker, PVOID context, XTaskQueueHandle queue, async_operation_callback work,
+    Create( IUnknown *invoker, PVOID context, XTaskQueueHandle queue, async_operation_callback<T> work,
                 IXAsync<T> **out )
     {
         HRESULT hr = S_OK;;
@@ -197,6 +207,8 @@ public:
 
         TRACE( "invoker %p, context %p, queue %p, work %p, out %p\n", invoker, context, queue, work, out );
 
+        static_assert( std::is_trivially_copyable_v<T> );
+
         impl->block.queue = queue;
         impl->block.context = static_cast<PVOID>( completioncb );
         impl->block.callback = CallbackThunk::Callback;
@@ -208,12 +220,10 @@ public:
         asyncctx->invoker = invoker;
         asyncctx->context = context;
         asyncctx->work = work;
-        PropVariantInit( &asyncctx->result );
 
         hr = XAsyncBegin( &impl->block, asyncctx, (PVOID)Create, __FUNCTION__, async_worker_callback );
         if ( FAILED( hr ) )
         {
-            PropVariantClear( &asyncctx->result );
             delete asyncctx;
             impl->Release();
 
@@ -233,8 +243,8 @@ private:
     struct AsyncContext
     {
         HRESULT hr;
-        PROPVARIANT result;
-        async_operation_callback work;
+        T result;
+        async_operation_callback<T> work;
         IUnknown *invoker;
         PVOID context;
     };
@@ -296,18 +306,16 @@ private:
 
         case XAsyncOp::Cleanup:
             ctx->invoker->Release();
-            PropVariantClear( &ctx->result );
             delete ctx;
             break;
 
         case XAsyncOp::GetResult:
-            // xgameruntime functions should do their own propvariant size allocation.
-            PropVariantCopy( static_cast<PROPVARIANT*>(data->buffer), &ctx->result );
+            RtlCopyMemory( data->buffer, &ctx->result, sizeof(T) );
             break;
 
         case XAsyncOp::DoWork:
             hr = ctx->work( ctx->invoker, ctx->context, &ctx->result );
-            XAsyncComplete( data->async, hr, sizeof(PROPVARIANT) );
+            XAsyncComplete( data->async, hr, sizeof(T) );
             break;
         }
 

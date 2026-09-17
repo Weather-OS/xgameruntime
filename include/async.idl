@@ -52,6 +52,7 @@ namespace XGameRuntime
     {
         [propput] HRESULT Completed( [in] XAsyncOperationCompletedHandlerImpl *routine );
         [propget] HRESULT Completed( [out, retval] XAsyncOperationCompletedHandlerImpl **routine );
+        [propget] XAsyncBlock* Block();
         HRESULT GetResults( [in] BOOLEAN wait, [out, retval] TResult *results );
     }
 }
