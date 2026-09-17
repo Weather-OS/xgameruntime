@@ -48,12 +48,14 @@ namespace Xodus
     interface IIPCLayer;
     interface IXodusService;
     interface IXodusIPCPacket;
+    interface IXodusIPCPacketStatics;
     interface IXodusXMLBuilder;
     interface IMsaTokenResponse;
 
     runtimeclass IPCLayer;
     runtimeclass XodusXMLBuilder;
     runtimeclass XodusService;
+    runtimeclass XodusIPCPacket;
 
     struct TitleMgtSignaturePolicy
     {
@@ -97,6 +99,15 @@ namespace Xodus
 
     [
         contract(XGameRuntime.XGameRuntimeContract, 1.0),
+        uuid(d408586d-3355-41e3-b5b3-1f8e18a3a112)
+    ]
+    interface IXodusIPCPacketStatics : IInspectable
+    {
+        HRESULT ConstructXodusIPCPacket( [in] MagicHeaderType magic, [in] UINT16 messageType, [in] Windows.Storage.Streams.IBuffer *buffer, [out, retval] Xodus.IXodusIPCPacket **out );
+    }
+
+    [
+        contract(XGameRuntime.XGameRuntimeContract, 1.0),
         uuid(f7904b4d-4738-4485-a517-b37405aa5b91)
     ]
     interface IIPCLayer : IInspectable
@@ -127,7 +138,6 @@ namespace Xodus
         HRESULT FromMsaTokenResponseXml( [in] LPCSTR xml_string, [out, retval] IMsaTokenResponse **response );
     }
 
-
     [
         contract(XGameRuntime.XGameRuntimeContract, 1.0),
         uuid(c25f9827-7718-48ea-aa4d-1567eba692d5)
@@ -152,6 +162,15 @@ namespace Xodus
     runtimeclass XodusXMLBuilder
     {
         [default] interface Xodus.IXodusXMLBuilder;
+    }
+
+    [
+        contract(XGameRuntime.XGameRuntimeContract, 1.0),
+        static(Xodus.IXodusIPCPacketStatics, XGameRuntime.XGameRuntimeContract, 1.0)
+    ]
+    runtimeclass XodusIPCPacket
+    {
+        [default] interface Xodus.IXodusIPCPacket;
     }
 
     [

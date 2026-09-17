@@ -57,6 +57,7 @@
 
 #include <xodusprovider.h>
 
+#include <activation.h>
 #define WIDL_using_Windows_Foundation
 #define WIDL_using_Windows_Foundation_Collections
 #include "windows.foundation.h"
@@ -72,6 +73,7 @@
 #define E_ILLEGAL_METHOD_CALL                              _HRESULT_TYPEDEF_(0x8000000E)
 
 extern IXThreadingImpl *x_threading_impl;
+extern IActivationFactory* xodus_ipc_packet_factory;
 
 #ifdef __cplusplus
 extern ABI::Xodus::IIPCLayer *xodus_ipclayer;

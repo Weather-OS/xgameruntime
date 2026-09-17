@@ -34,7 +34,7 @@ using namespace ABI::Xodus;
 
 typedef HRESULT (CALLBACK *IPCResponseHandlerCallback)( PVOID context, IXodusIPCPacket *response );
 
-struct XodusIPCPacket :
+class ABI::Xodus::XodusIPCPacket :
     public IXodusIPCPacket
 {
 public:
@@ -71,7 +71,7 @@ private:
     std::atomic_long ref{ 1 };
 };
 
-struct IPCResponseHandler :
+class IPCResponseHandler :
     public IIPCResponseHandler
 {
 public:
@@ -99,7 +99,7 @@ private:
     std::atomic_long ref{ 1 };
 };
 
-struct MsaTokenResponse :
+class MsaTokenResponse :
     public IMsaTokenResponse
 {
 public:

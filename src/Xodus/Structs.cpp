@@ -129,10 +129,127 @@ XodusIPCPacket::get_Message( ABI::Windows::Storage::Streams::IBuffer **out )
     return S_OK;
 }
 
+class XodusIPCPacketImpl
+    : public IActivationFactory
+    , public IXodusIPCPacketStatics
+{
+public:
+    virtual ~XodusIPCPacketImpl() = default;
+
+    HRESULT WINAPI
+    QueryInterface( REFIID iid, void **out ) noexcept override
+    {
+        TRACE( "iface %p, iid %s, out %p.\n", this, debugstr_guid( &iid ), out );
+
+        if (!out) return E_POINTER;
+        *out = nullptr;
+
+        if ( iid == __uuidof( IUnknown ) ||
+             iid == __uuidof( IInspectable ) ||
+             iid == __uuidof( IActivationFactory ) )
+        {
+            AddRef();
+            *out = static_cast<IActivationFactory *>(this);
+            return S_OK;
+        }
+
+        if ( iid == __uuidof( IXodusIPCPacketStatics ) )
+        {
+            AddRef();
+            *out = static_cast<IXodusIPCPacketStatics *>(this);
+            return S_OK;
+        }
+
+        FIXME( "%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid( &iid ) );
+        *out = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    ULONG WINAPI
+    AddRef() noexcept override
+    {
+        ULONG curr = static_cast<ULONG>(++ref);
+        TRACE( "iface %p increasing refcount to %lu.\n", this, curr );
+        return curr;
+    }
+
+    ULONG WINAPI
+    Release() noexcept override
+    {
+        ULONG curr = static_cast<ULONG>(--ref);
+        TRACE( "iface %p decreasing refcount to %lu.\n", this, curr );
+
+        // Polymorphic classes should not be deleted.
+        /*
+        if ( !curr )
+            delete this;
+        */
+
+        return curr;
+    }
+
+    HRESULT WINAPI
+    GetIids( ULONG *iid_count, IID **iids ) noexcept override
+    {
+        TRACE( "iface %p, iid_count %p, iids %p\n", this, iid_count, iids );
+
+        if ( !iid_count || !iids )
+            return E_POINTER;
+
+        *iid_count = 2;
+        IID* allocated = static_cast<IID*>( CoTaskMemAlloc( sizeof(IID) * (*iid_count) ) );
+
+        if ( !allocated )
+            return E_OUTOFMEMORY;
+
+        allocated[0] = __uuidof( IActivationFactory );
+        allocated[1] = __uuidof( IXodusIPCPacketStatics );
+
+        *iids = allocated;
+        return S_OK;
+    }
+
+    HRESULT WINAPI
+    GetRuntimeClassName( HSTRING *class_name ) noexcept override
+    {
+        TRACE( "iface %p, class_name %p\n", this, class_name );
+        return WindowsCreateString( (LPCWSTR)L"Xodus.XodusIPCPacket", 30, class_name );
+    }
+
+    HRESULT WINAPI
+    GetTrustLevel( TrustLevel *trust_level ) noexcept override
+    {
+        FIXME( "iface %p, trust_level %p stub!\n", this, trust_level );
+        return E_NOTIMPL;
+    }
+
+    HRESULT WINAPI
+    ActivateInstance( IInspectable **instance ) noexcept override
+    {
+        ERR( "iface %p, This factory is not activatable!\n", this );
+        return E_NOTIMPL;
+    }
+
+    HRESULT WINAPI
+    ConstructXodusIPCPacket( ABI::Xodus::MagicHeaderType magic, UINT16 messageType, ABI::Windows::Storage::Streams::IBuffer* buffer, ABI::Xodus::IXodusIPCPacket** out ) noexcept override
+    {
+        // AddRef is done in constructor.
+        *out = new XodusIPCPacket( magic, messageType, buffer );
+        return S_OK;
+    }
+
+private:
+    std::atomic_long ref{ 1 };
+};
+
+static XodusIPCPacketImpl g_xodus_ipc_packet_statics;
+
+IActivationFactory* xodus_ipc_packet_factory =
+    static_cast<IActivationFactory*>(&g_xodus_ipc_packet_statics);
+
 /**
  * IPCResponseHandler: Handler interface for IPC Response events.
  */
-
 IPCResponseHandler::IPCResponseHandler(
     IPCResponseHandlerCallback callback,
     PVOID context )
