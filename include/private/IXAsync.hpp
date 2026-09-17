@@ -29,6 +29,9 @@
 #include <mutex>
 #include <atomic>
 
+#define HANDLER_NOT_SET ((void *)~(ULONG_PTR)0)
+#define E_ILLEGAL_DELEGATE_ASSIGNMENT                      _HRESULT_TYPEDEF_(0x80000018)
+
 using namespace ABI;
 using namespace ABI::XGameRuntime;
 
@@ -131,16 +134,31 @@ public:
     HRESULT WINAPI
     put_Completed( IXAsyncOperationCompletedHandlerImpl *routine ) noexcept override
     {
+        HRESULT hr;
+
         TRACE( "iface %p, routine %p\n", this, routine );
 
-        // Keep the routine alive until invokation.
-        if ( completed )
         {
-            completed->Release();
-            completed = nullptr;
+            std::unique_lock<std::mutex> lock_guard( lock );
+
+            if ( completed != HANDLER_NOT_SET )
+                return E_ILLEGAL_DELEGATE_ASSIGNMENT;
+
+            // Keep the routine alive until invokation.
+            routine = completed;
+            routine->AddRef();
+
+            if ( status > Started )
+            {
+                completed = nullptr; /* Prevent concurrent invoke. */
+                lock_guard.unlock();
+
+                routine->Invoke( &block );
+                routine->Release();
+
+                return S_OK;
+            }
         }
-        routine->AddRef();
-        completed = routine;
 
         return S_OK;
     }
@@ -150,10 +168,16 @@ public:
     {
         TRACE( "iface %p, routine %p\n", this, routine );
 
-        if ( completed )
         {
-            completed->AddRef();
-            *routine = completed;
+            const std::lock_guard<std::mutex> lock_guard( lock );
+
+            if ( completed == nullptr || completed == HANDLER_NOT_SET )
+                *routine = nullptr;
+            else
+            {
+                completed->AddRef();
+                *routine = completed;
+            }
         }
 
         return S_OK;
@@ -203,6 +227,7 @@ public:
             impl->Release();
             if ( !out )
                 impl->Release(); //self destructing operation.
+            impl->status = AsyncStatus::Completed;
         } );
 
         TRACE( "invoker %p, context %p, queue %p, work %p, out %p\n", invoker, context, queue, work, out );
@@ -212,6 +237,8 @@ public:
         impl->block.queue = queue;
         impl->block.context = static_cast<PVOID>( completioncb );
         impl->block.callback = CallbackThunk::Callback;
+        impl->completed = static_cast<IXAsyncOperationCompletedHandlerImpl*>( HANDLER_NOT_SET );
+        impl->status = AsyncStatus::Started;
 
         // Keep XAsync alive until completioncb is invoked.
         impl->AddRef();
@@ -326,6 +353,7 @@ private:
     std::mutex lock;
     IXAsyncOperationCompletedHandlerImpl *completed = nullptr;
     XAsyncBlock block{};
+    AsyncStatus status{};
 };
 
 #endif
