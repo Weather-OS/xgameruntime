@@ -40,7 +40,7 @@ using namespace ABI::Windows::Foundation;
 using namespace ABI::Windows::Storage::Streams;
 using namespace ::Windows::Storage::Streams;
 
-static int sockfd = 0;
+static HANDLE sockfd = nullptr;
 
 LPSTR NormalizeUnixPathToWine( LPCSTR unix_path )
 {
@@ -427,6 +427,7 @@ private:
         if ( FAILED( nts ) ) return HRESULT_FROM_NT( nts );
 
         asyncres = WaitForSingleObject( context.event, IPC_REQUEST_TIMEOUT_MS );
+        CloseHandle( context.event );
         status = iface->remove_ResponseReceived( token );
         if ( FAILED( status ) ) return status;
         if ( asyncres )
