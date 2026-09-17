@@ -60,7 +60,7 @@ public:
             return S_OK;
         }
 
-        return E_NOTIMPL;
+        return E_NOINTERFACE;
     }
 
     ULONG WINAPI
@@ -98,7 +98,7 @@ public:
         if ( !iid_count || !iids )
             return E_POINTER;
 
-        *iid_count = 2;
+        *iid_count = 1;
         IID* allocated = static_cast<IID*>( CoTaskMemAlloc( sizeof(IID) * (*iid_count) ) );
 
         if ( !allocated )
@@ -131,6 +131,11 @@ public:
         TRACE( "iface %p, routine %p\n", this, routine );
 
         // Keep the routine alive until invokation.
+        if ( completed )
+        {
+            completed->Release();
+            completed = nullptr;
+        }
         routine->AddRef();
         completed = routine;
 
@@ -162,7 +167,7 @@ public:
         hr = XAsyncGetStatus( &block, wait );
         if ( FAILED( hr ) ) return hr;
 
-        hr = XAsyncGetResult( &block, (PVOID)Create, sizeof(PROPVARIANT *), &result, nullptr );
+        hr = XAsyncGetResult( &block, (PVOID)Create, sizeof(PROPVARIANT), &result, nullptr );
         if ( FAILED( hr ) ) return hr;
 
         if ( result.vt == VT_UNKNOWN )
@@ -181,9 +186,9 @@ public:
         XAsync<T> *impl = new XAsync<T>();
         AsyncContext *asyncctx = new AsyncContext();
 
-        CallbackThunk completioncb = CallbackThunk( [&]( XAsyncBlock* async )
+        // Capturing by reference here may result in a dangling pointer
+        CallbackThunk *completioncb = new CallbackThunk( [=]( XAsyncBlock* async )
         {
-            impl->AddRef();
             async_completion_callback( impl );
             impl->Release();
             if ( !out )
@@ -193,8 +198,11 @@ public:
         TRACE( "invoker %p, context %p, queue %p, work %p, out %p\n", invoker, context, queue, work, out );
 
         impl->block.queue = queue;
-        impl->block.context = static_cast<PVOID>( &completioncb );
+        impl->block.context = static_cast<PVOID>( completioncb );
         impl->block.callback = CallbackThunk::Callback;
+
+        // Keep XAsync alive until completioncb is invoked.
+        impl->AddRef();
 
         invoker->AddRef();
         asyncctx->invoker = invoker;
@@ -208,6 +216,10 @@ public:
             PropVariantClear( &asyncctx->result );
             delete asyncctx;
             impl->Release();
+
+            // Also release the reference held by completioncb, as it's never going to be invoked.
+            impl->Release();
+            delete completioncb;
             return hr;
         }
 
@@ -241,6 +253,7 @@ private:
         {
             const CallbackThunk* pthis = static_cast<CallbackThunk*>(async->context);
             pthis->_func( async );
+            delete pthis; // Thunks are to be deleted after used since completion callbacks are only invoked once.
         }
 
     private:
@@ -251,14 +264,17 @@ private:
     async_completion_callback( IUnknown* iface )
     {
         XAsync *impl = static_cast<XAsync *>( iface );
-        if ( impl->completed )
+        IXAsyncOperationCompletedHandlerImpl* handler;
+
         {
-            {
-                const std::lock_guard<std::mutex> lock( impl->lock );
-                impl->completed->Invoke( &impl->block );
-                impl->completed->Release();
-                impl->completed = nullptr;
-            }
+            const std::lock_guard<std::mutex> lock( impl->lock );
+            handler = impl->completed;
+            impl->completed = nullptr;
+        }
+        if ( handler )
+        {
+            handler->Invoke( &impl->block );
+            handler->Release();
         }
     }
 
@@ -291,7 +307,7 @@ private:
 
         case XAsyncOp::DoWork:
             hr = ctx->work( ctx->invoker, ctx->context, &ctx->result );
-            XAsyncComplete( data->async, hr, sizeof(PROPVARIANT *) );
+            XAsyncComplete( data->async, hr, sizeof(PROPVARIANT) );
             break;
         }
 
