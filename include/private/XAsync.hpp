@@ -24,6 +24,7 @@
 #ifndef XGAMERUNTIME_ASYNCWRAPPER_H
 #define XGAMERUNTIME_ASYNCWRAPPER_H
 
+#include "private/logging.h"
 #include <coroutine>
 #include <cstring>
 #include <functional>
@@ -31,6 +32,7 @@
 #include <memory>
 #include <semaphore>
 #include <utility>
+#include <asyncinfo.h>
 
 #define E_ILLEGAL_DELEGATE_ASSIGNMENT                      _HRESULT_TYPEDEF_(0x80000018)
 
@@ -286,14 +288,7 @@ namespace ABI::XGameRuntime
         XAsync&
         wait()
         {
-            std::binary_semaphore event{ 0 };
-
-            this->then( [&event]( XAsyncBlock* )
-            {
-                event.release();
-            });
-
-            event.acquire();
+            check_hr_(XAsyncGetStatus(this->get_Block(), true));
 
             return *this;
         }
